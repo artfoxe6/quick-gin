@@ -1,0 +1,28 @@
+[app]
+AppMode = debug
+Listen = :8080
+ReadTimeout = 60
+WriteTimeout = 60
+LogDir = log
+
+[jwt]
+Secret = "sLBSeoi0xV2fxaW_lIqDucR0RLmEnAJQNwrSd01kx39pTWm1-qfR-Z0cnPPqn16_sjovzsEfyahy2lO1src2_Q=="
+; hour
+Exp = 24
+RefreshExp = 720
+
+[database]
+Host = localhost
+Port = 3306
+User = test
+Password = 123456
+Db = quick-gin
+
+
+[redis]
+Host = 127.0.0.2
+Port = 6379
+Password =
+Db = 1
+MaxIdle = 5
+MaxActive = 10
