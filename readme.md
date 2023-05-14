@@ -40,11 +40,11 @@
 
 #### 开始使用
 - 克隆仓库到本地
-- 进入根目录执行初始化命令
+- 初始化项目，根据自己的系统选择
   ```
-    ./init       Linux
-    ./init_mac   Mac
-    ./init.exe   Windows
+    ./quick-cli github.com/xxx/myblog
+    ./quick-cli-mac github.com/xxx/myblog
+    ./quick-cli.exe github.com/xxx/myblog
   ```
 - 启动服务
   ```
