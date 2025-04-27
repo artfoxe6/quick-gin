@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"go/build"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"runtime/debug"
@@ -33,11 +35,15 @@ func main() {
 		fmt.Println("must in project root dir")
 		return
 	}
-
 	info := GenInfo{
 		Name:      capitalizeFirstLetter(module),
 		LowerName: strings.ToLower(module),
 		Package:   getPackage(),
+	}
+
+	if isPackageExists(getPackage() + "internal/app/" + info.LowerName) {
+		log.Println("Package exists")
+		return
 	}
 
 	temp := map[string]string{
@@ -339,3 +345,8 @@ api.GET("/{{.LowerName}}/detail", {{.LowerName}}.Detail)
 api.GET("/{{.LowerName}}/list", {{.LowerName}}.List)
 
 return r`
+
+func isPackageExists(pkgPath string) bool {
+	_, err := build.Import(pkgPath, "", build.FindOnly)
+	return err == nil
+}

@@ -39,7 +39,7 @@ func run(srcDir, destDir, packageName string) error {
 	if err != nil {
 		return err
 	}
-	cmd = exec.Command("rm", "-rf", destDir+"/.git")
+	cmd = exec.Command("rm", "-rf", destDir+"/.*")
 	_, err = cmd.Output()
 	if err != nil {
 		return err

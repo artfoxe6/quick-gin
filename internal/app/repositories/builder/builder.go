@@ -32,8 +32,14 @@ func (b *Builder) set(key string, compare string, value any) *Builder {
 func (b *Builder) Eq(key string, value any) *Builder {
 	return b.set(key, "=", value)
 }
+func (b *Builder) Neq(key string, value any) *Builder {
+	return b.set(key, "!=", value)
+}
 func (b *Builder) In(key string, value any) *Builder {
 	return b.set(key, "in", value)
+}
+func (b *Builder) Nin(key string, value any) *Builder {
+	return b.set(key, "not in", value)
 }
 func (b *Builder) Gt(key string, value any) *Builder {
 	return b.set(key, ">", value)
