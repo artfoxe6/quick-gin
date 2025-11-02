@@ -243,6 +243,7 @@ func copyFile(src, dst string, entry fs.DirEntry) error {
 	if info, err := entry.Info(); err == nil {
 		mode = info.Mode()
 	}
+	mode |= 0o200 // ensure owner write permission
 
 	out, err := os.OpenFile(dst, os.O_CREATE|os.O_RDWR|os.O_TRUNC, mode.Perm())
 	if err != nil {
@@ -251,7 +252,10 @@ func copyFile(src, dst string, entry fs.DirEntry) error {
 	defer out.Close()
 
 	_, err = io.Copy(out, in)
-	return err
+	if err != nil {
+		return err
+	}
+	return os.Chmod(dst, mode.Perm())
 }
 
 func defaultModuleName(dest string) string {
