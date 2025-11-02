@@ -16,7 +16,7 @@ import (
 
 func main() {
 	var configPath string
-	flag.StringVar(&configPath, "config", "config.example.ini", "config file path")
+	flag.StringVar(&configPath, "config", "config.ini", "config file path")
 	flag.Parse()
 	config.Setup(configPath)
 

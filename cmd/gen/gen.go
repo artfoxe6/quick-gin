@@ -4,11 +4,10 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"go/build"
 	"io"
-	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime/debug"
 	"strings"
 	"text/template"
@@ -35,92 +34,114 @@ func main() {
 		fmt.Println("must in project root dir")
 		return
 	}
+	pkg := strings.TrimSpace(getPackage())
+	if pkg == "" {
+		fmt.Println("unable to resolve module path")
+		return
+	}
 	info := GenInfo{
 		Name:      capitalizeFirstLetter(module),
 		LowerName: strings.ToLower(module),
-		Package:   getPackage(),
+		Package:   pkg,
 	}
 
-	if isPackageExists(getPackage() + "internal/app/" + info.LowerName) {
-		log.Println("Package exists")
+	if packageExists(info) {
+		fmt.Printf("module %q already exists, skipping\n", info.LowerName)
 		return
 	}
 
-	temp := map[string]string{
-		"repositories": repositoryTpl,
-		"models":       modelTpl,
-		"services":     serviceTpl,
-		"handlers":     handlerTpl,
+	files := []struct {
+		dir string
+		tpl string
+	}{
+		{dir: "repositories", tpl: repositoryTpl},
+		{dir: "models", tpl: modelTpl},
+		{dir: "services", tpl: serviceTpl},
+		{dir: "handlers", tpl: handlerTpl},
 	}
-	for k, v := range temp {
-		genCode(v, "./internal/app/"+k+"/"+strings.ToLower(module)+".go", info)
+	for _, file := range files {
+		path := filepath.Join("internal", "app", file.dir, fmt.Sprintf("%s.go", info.LowerName))
+		if err := genCode(file.tpl, path, info); err != nil {
+			fmt.Printf("error generating %s: %v\n", path, err)
+		}
 	}
 
-	genRoute(routeTpl, "./internal/app/router/route.go", info)
+	if err := genRoute(routeTpl, filepath.Join("internal", "app", "router", "route.go"), info); err != nil {
+		fmt.Printf("error updating router: %v\n", err)
+	}
 }
 
-func genRoute(tpl, path string, info GenInfo) {
+func genRoute(tpl, path string, info GenInfo) error {
 	tmpl, err := template.New(info.LowerName).Parse(tpl)
 	if err != nil {
-		fmt.Println("Error parsing template:", err)
-		return
+		return fmt.Errorf("parse template: %w", err)
 	}
 	var buffer bytes.Buffer
 	err = tmpl.Execute(&buffer, info)
 	if err != nil {
-		fmt.Println("Error executing template:", err)
-		return
+		return fmt.Errorf("execute template: %w", err)
 	}
 	fp, err := os.OpenFile(path, os.O_RDWR, 0644)
 	if err != nil {
-		fmt.Println("Error opening file:", err)
-		return
+		return fmt.Errorf("open file: %w", err)
 	}
 	defer fp.Close()
 	oldContent, err := io.ReadAll(fp)
 	if err != nil {
-		fmt.Println("Error reading file:", err)
-		return
+		return fmt.Errorf("read file: %w", err)
 	}
-	newContent := strings.Replace(string(oldContent), "return r", buffer.String(), 1)
+	routeInit := fmt.Sprintf("%s := handlers.New%sHandler()", info.LowerName, info.Name)
+	if strings.Contains(string(oldContent), routeInit) {
+		fmt.Printf("router already contains handlers for %s, skipping route update\n", info.LowerName)
+		return nil
+	}
+	const returnMarker = "return r"
+	newContent := strings.Replace(string(oldContent), returnMarker, buffer.String(), 1)
+	if newContent == string(oldContent) {
+		return fmt.Errorf("route file missing marker %q", returnMarker)
+	}
 
 	if _, err = fp.Seek(0, 0); err != nil {
-		fmt.Println("Error seeking file:", err)
-		return
+		return fmt.Errorf("seek file: %w", err)
 	}
 	if err = fp.Truncate(0); err != nil {
-		fmt.Println("Error truncating file:", err)
-		return
+		return fmt.Errorf("truncate file: %w", err)
 	}
 
 	_, err = io.WriteString(fp, newContent)
 	if err != nil {
-		fmt.Println("Error writing file:", err)
-		return
+		return fmt.Errorf("write file: %w", err)
 	}
-	cmd := exec.Command("go", "fmt", "./internal/app/router/route.go")
-	_ = cmd.Run()
+	if err := exec.Command("gofmt", "-w", path).Run(); err != nil {
+		return fmt.Errorf("format route: %w", err)
+	}
 	fmt.Println(path)
+	return nil
 }
 
-func genCode(tpl, path string, info GenInfo) {
+func genCode(tpl, path string, info GenInfo) error {
+	if fileExists(path) {
+		fmt.Printf("%s already exists, skipping\n", path)
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return fmt.Errorf("create dir: %w", err)
+	}
 	tmpl, err := template.New(info.LowerName).Parse(tpl)
 	if err != nil {
-		fmt.Println("Error parsing template:", err)
-		return
+		return fmt.Errorf("parse template: %w", err)
 	}
-	fmt.Println(path)
 	file, err := os.Create(path)
 	if err != nil {
-		fmt.Println("Error creating file:", err)
-		return
+		return fmt.Errorf("create file: %w", err)
 	}
 	defer file.Close()
 	err = tmpl.Execute(file, info)
 	if err != nil {
-		fmt.Println("Error executing template:", err)
-		return
+		return fmt.Errorf("execute template: %w", err)
 	}
+	fmt.Println(path)
+	return nil
 }
 func capitalizeFirstLetter(s string) string {
 	if s == "" {
@@ -346,7 +367,19 @@ api.GET("/{{.LowerName}}/list", {{.LowerName}}.List)
 
 return r`
 
-func isPackageExists(pkgPath string) bool {
-	_, err := build.Import(pkgPath, "", build.FindOnly)
-	return err == nil
+func packageExists(info GenInfo) bool {
+	dir := filepath.Join("internal", "app", info.LowerName)
+	stat, err := os.Stat(dir)
+	if err != nil {
+		return !os.IsNotExist(err)
+	}
+	return stat.IsDir()
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return !os.IsNotExist(err)
+	}
+	return !info.IsDir()
 }

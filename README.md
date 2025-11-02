@@ -43,7 +43,7 @@ quick-gin/
 │       ├── mailer/        # Email service
 │       ├── oss/           # Object storage
 │       └── token/         # JWT token
-├── config.example.ini     # Configuration file template
+├── config.ini            # Configuration file template
 ├── Makefile              # Build scripts
 └── README.md             # Project documentation
 ```
@@ -81,7 +81,7 @@ go mod download
 Copy the configuration template and modify as needed:
 
 ```bash
-cp config.example.ini config.ini
+cp config.ini config.ini
 ```
 
 #### Database Configuration
