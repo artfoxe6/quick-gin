@@ -52,20 +52,31 @@ quick-gin/
 
 ## 🚀 Quick Start
 
-### 1. Clone the Project
+### 1. Create a New Project (Recommended)
+
+```bash
+go run github.com/artfoxe6/quick-gin@latest myapp --module github.com/you/myapp
+cd myapp
+```
+
+- If `--module` is omitted the module name defaults to the project folder (e.g. `myapp`).
+- Use `--force` when you want to overwrite an existing directory.
+- The command copies the latest template and runs `go mod tidy` automatically.
+
+### 2. Manual Clone (Alternative)
 
 ```bash
 git clone https://github.com/artfoxe6/quick-gin.git
 cd quick-gin
 ```
 
-### 2. Install Dependencies
+#### Install Dependencies
 
 ```bash
 go mod download
 ```
 
-### 3. Configuration Setup
+#### Configuration Setup
 
 Copy the configuration template and modify as needed:
 
@@ -111,7 +122,7 @@ Db = 1
 Type = memory
 ```
 
-### 4. Start the Service
+#### Start the Service
 
 ```bash
 # Development mode
