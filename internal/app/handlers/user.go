@@ -4,7 +4,14 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
+	"io"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/artfoxe6/quick-gin/internal/app"
+	"github.com/artfoxe6/quick-gin/internal/app/apperr"
 	"github.com/artfoxe6/quick-gin/internal/app/config"
 	"github.com/artfoxe6/quick-gin/internal/app/request"
 	"github.com/artfoxe6/quick-gin/internal/app/services"
@@ -12,38 +19,36 @@ import (
 	"github.com/artfoxe6/quick-gin/internal/pkg/oss"
 	"github.com/artfoxe6/quick-gin/internal/pkg/token"
 	"github.com/gin-gonic/gin"
-	"io"
-	"net/http"
-	"strconv"
-	"strings"
-	"time"
 )
 
 type UserHandler struct {
-	service *services.UserService
+	service services.UserService
 }
 
-func NewUserHandler() *UserHandler {
-	return &UserHandler{
-		service: services.NewUserService(),
-	}
+func NewUserHandler(service services.UserService) *UserHandler {
+	return &UserHandler{service: service}
 }
 
 func (h *UserHandler) Create(c *gin.Context) {
 	r := new(request.UserUpsert)
 	api := app.New(c, r)
-	err := h.service.Create(r)
-	if err != nil {
-		api.Error(err)
+	if api.HasError() {
+		return
+	}
+	if api.Error(h.service.Create(r)) {
+		return
 	}
 	api.Json()
 }
+
 func (h *UserHandler) Update(c *gin.Context) {
 	r := new(request.UserUpsert)
 	api := app.New(c, r)
-	err := h.service.Update(r)
-	if err != nil {
-		api.Error(err)
+	if api.HasError() {
+		return
+	}
+	if api.Error(h.service.Update(r)) {
+		return
 	}
 	api.Json()
 }
@@ -51,34 +56,46 @@ func (h *UserHandler) Update(c *gin.Context) {
 func (h *UserHandler) Delete(c *gin.Context) {
 	r := new(request.DeleteId)
 	api := app.New(c, r)
-	err := h.service.Delete(r.Id)
-	if err != nil {
-		api.Error(err)
+	if api.HasError() {
+		return
+	}
+	if api.Error(h.service.Delete(r.Id)) {
+		return
 	}
 	api.Json()
 }
+
 func (h *UserHandler) Detail(c *gin.Context) {
 	api := app.New(c, nil)
+	if api.HasError() {
+		return
+	}
 	idStr := c.Query("id")
 	if idStr == "" {
-		api.Error("id is required")
+		api.Error(apperr.BadRequest("id is required"))
+		return
 	}
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		api.Error("id is required")
+		api.Error(apperr.BadRequest("id is required"))
+		return
 	}
 	news, err := h.service.Detail(uint(id))
-	if err != nil {
-		api.Error(err)
+	if api.Error(err) {
+		return
 	}
 	api.Json(news)
 }
+
 func (h *UserHandler) List(c *gin.Context) {
 	r := new(request.NormalSearch)
 	api := app.New(c, r)
+	if api.HasError() {
+		return
+	}
 	data, total, err := h.service.List(r)
-	if err != nil {
-		api.Error(err)
+	if api.Error(err) {
+		return
 	}
 	api.Json(map[string]any{
 		"total": total,
@@ -89,37 +106,43 @@ func (h *UserHandler) List(c *gin.Context) {
 func (h *UserHandler) Login(c *gin.Context) {
 	r := new(request.UserLogin)
 	api := app.New(c, r)
-	var token string
+	if api.HasError() {
+		return
+	}
+	var tokenStr string
 	var err error
 	if r.Email == config.Super.Email && r.Password == config.Super.Password {
-		token, err = h.service.SuperUserToken(r.Email, r.Password)
+		tokenStr, err = h.service.SuperUserToken(r.Email, r.Password)
 	} else {
-		token, err = h.service.Login(r)
+		tokenStr, err = h.service.Login(r)
 	}
-	if err != nil {
-		api.Error(err)
+	if api.Error(err) {
+		return
 	}
-	api.Json(token)
+	api.Json(tokenStr)
 }
 
 func (h *UserHandler) Register(c *gin.Context) {
 	r := new(request.UserCreate)
 	api := app.New(c, r)
-
-	token, err := h.service.Register(r)
-	if err != nil {
-		api.Error(err)
+	if api.HasError() {
+		return
 	}
-	api.Json(token)
+	tokenStr, err := h.service.Register(r)
+	if api.Error(err) {
+		return
+	}
+	api.Json(tokenStr)
 }
 
 func (h *UserHandler) UpdatePassword(c *gin.Context) {
 	r := new(request.UpdatePassword)
 	api := app.New(c, r)
-
-	err := h.service.UpdatePassword(r)
-	if err != nil {
-		api.Error(err)
+	if api.HasError() {
+		return
+	}
+	if api.Error(h.service.UpdatePassword(r)) {
+		return
 	}
 	api.Json()
 }
@@ -127,19 +150,24 @@ func (h *UserHandler) UpdatePassword(c *gin.Context) {
 func (h *UserHandler) Code(c *gin.Context) {
 	r := new(request.Code)
 	api := app.New(c, r)
-	err := h.service.SendCode(r)
-	if err != nil {
-		api.Error(err)
+	if api.HasError() {
+		return
+	}
+	if api.Error(h.service.SendCode(r)) {
+		return
 	}
 	api.Json()
 }
 
 func (h *UserHandler) FreshToken(c *gin.Context) {
 	api := app.New(c, nil)
+	if api.HasError() {
+		return
+	}
 	oldToken := c.GetHeader("Authorization")
 	tokenStr, err := token.Refresh(oldToken)
-	if err != nil {
-		api.Error(err)
+	if api.Error(err) {
+		return
 	}
 	api.Json(tokenStr)
 }
@@ -147,14 +175,18 @@ func (h *UserHandler) FreshToken(c *gin.Context) {
 func (h *UserHandler) Upload(c *gin.Context) {
 	r := new(request.Upload)
 	api := app.New(c, r)
-	// base64
+	if api.HasError() {
+		return
+	}
 	if r.Raw != "" {
-		if strings.HasPrefix(r.Raw, "data:image/png;base64,") {
-			r.Raw = r.Raw[22:]
+		raw := r.Raw
+		if strings.HasPrefix(raw, "data:image/png;base64,") {
+			raw = raw[22:]
 		}
-		data, err := base64.StdEncoding.DecodeString(r.Raw)
+		data, err := base64.StdEncoding.DecodeString(raw)
 		if err != nil {
-			api.Error(err.Error())
+			api.Error(apperr.BadRequest(err.Error()))
+			return
 		}
 		contentType := http.DetectContentType(data)
 		if contentType == "image/png" || contentType == "image/jpeg" {
@@ -165,25 +197,31 @@ func (h *UserHandler) Upload(c *gin.Context) {
 		fileName := fmt.Sprintf("%s/%s/%d%d%s", r.Type, time.Now().Format("20060102"), time.Now().Unix(), len(data), ".jpg")
 		url := oss.GetClient().Upload(fileName, bytes.NewReader(data))
 		if url == "" {
-			api.Error("file upload error")
+			api.Error(apperr.BadRequest("file upload error"))
+			return
 		}
 		api.Json(url)
-	} else if r.File != nil {
-		//文件上传
+		return
+	}
+	if r.File != nil {
 		if r.File.Size == 0 || r.File.Size > 500*1024*1024 {
-			api.Error("file_size_err")
+			api.Error(apperr.BadRequest("file_size_err"))
+			return
 		}
 		fileName := fmt.Sprintf("%s/%s/%s/%s", r.Type, time.Now().Format("20060102"), time.Now().Format("150405"), r.File.Filename)
 		f, err := r.File.Open()
 		if err != nil {
-			api.Error("file open error")
+			api.Error(apperr.BadRequest("file open error"))
+			return
 		}
+		defer f.Close()
 
 		data, err := io.ReadAll(f)
+		if err != nil {
+			api.Error(apperr.BadRequest("file read error"))
+			return
+		}
 		if r.File.Size > 10*1024*1024 {
-			if err != nil {
-				api.Error("file read error")
-			}
 			contentType := http.DetectContentType(data)
 			if contentType == "image/png" || contentType == "image/jpeg" {
 				if compressData, err := kit.Compress(data, contentType); err == nil {
@@ -193,10 +231,11 @@ func (h *UserHandler) Upload(c *gin.Context) {
 		}
 		url := oss.GetClient().Upload(fileName, bytes.NewReader(data))
 		if url == "" {
-			api.Error("file upload error")
+			api.Error(apperr.BadRequest("file upload error"))
+			return
 		}
 		api.Json(url)
-	} else {
-		api.Error()
+		return
 	}
+	api.Error(apperr.BadRequest("invalid upload payload"))
 }

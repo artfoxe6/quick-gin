@@ -5,3 +5,4 @@ log
 CLAUDE.md
 AGENTS.md
 .DS_Store
+/data/app.db

@@ -1,64 +1,83 @@
 package services
 
 import (
-	"errors"
+	"github.com/artfoxe6/quick-gin/internal/app/apperr"
 	"github.com/artfoxe6/quick-gin/internal/app/models"
-	"github.com/artfoxe6/quick-gin/internal/app/repositories"
 	"github.com/artfoxe6/quick-gin/internal/app/repositories/builder"
 	"github.com/artfoxe6/quick-gin/internal/app/request"
 )
 
-type AuthorService struct {
-	repository *repositories.AuthorRepository
+type AuthorRepository interface {
+	FindOne(map[string]any, ...*builder.Builder) *models.Author
+	Create(*models.Author) error
+	Update(*models.Author) error
+	Delete(uint) error
+	Get(uint, ...*builder.Builder) (*models.Author, error)
+	ListWithCount(int, int, ...*builder.Builder) ([]models.Author, int64, error)
 }
 
-func NewAuthorService() *AuthorService {
-	return &AuthorService{
-		repository: repositories.NewAuthorRepository(),
-	}
+type AuthorService interface {
+	Create(r *request.AuthorUpsert) error
+	Update(r *request.AuthorUpsert) error
+	Delete(id uint) error
+	Detail(id uint) (any, error)
+	List(r *request.NormalSearch) (any, int64, error)
 }
 
-func (s *AuthorService) Create(r *request.AuthorUpsert) error {
+type authorService struct {
+	repository AuthorRepository
+}
+
+func NewAuthorService(repository AuthorRepository) AuthorService {
+	return &authorService{repository: repository}
+}
+
+func (s *authorService) Create(r *request.AuthorUpsert) error {
 	author := models.Author{
 		Name: *r.Name,
 	}
 	if one := s.repository.FindOne(map[string]any{"name": author.Name}); one.ID != 0 {
-		return errors.New("name exists")
+		return apperr.BadRequest("name exists")
 	}
 	if err := s.repository.Create(&author); err != nil {
-		return err
+		return apperr.Internal(err)
 	}
 	return nil
 }
 
-func (s *AuthorService) Update(r *request.AuthorUpsert) error {
+func (s *authorService) Update(r *request.AuthorUpsert) error {
 	author, err := s.repository.Get(*r.Id)
 	if err != nil {
-		return err
+		return apperr.Internal(err)
 	}
 	if r.Name != nil {
 		author.Name = *r.Name
 	}
 	if one := s.repository.FindOne(map[string]any{"name": author.Name}); one.ID != 0 && one.ID != author.ID {
-		return errors.New("name exists")
+		return apperr.BadRequest("name exists")
 	}
 	if err = s.repository.Update(author); err != nil {
-		return err
+		return apperr.Internal(err)
 	}
 	return nil
 }
 
-func (s *AuthorService) Delete(id uint) error {
-	return s.repository.Delete(id)
+func (s *authorService) Delete(id uint) error {
+	if err := s.repository.Delete(id); err != nil {
+		return apperr.Internal(err)
+	}
+	return nil
 }
-func (s *AuthorService) Detail(id uint) (any, error) {
+
+func (s *authorService) Detail(id uint) (any, error) {
 	author, err := s.repository.Get(id)
 	if err != nil {
-		return nil, err
+		return nil, apperr.Internal(err)
 	}
 	return author.ToMap(), nil
 }
-func (s *AuthorService) List(r *request.NormalSearch) (any, int64, error) {
+
+func (s *authorService) List(r *request.NormalSearch) (any, int64, error) {
 	b := builder.New()
 	if r.Keyword != nil {
 		b.Like("name", *r.Keyword)
@@ -70,7 +89,7 @@ func (s *AuthorService) List(r *request.NormalSearch) (any, int64, error) {
 	b.Order(orderSet[r.Sort])
 	authors, total, err := s.repository.ListWithCount(r.Offset, r.Limit, b)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, apperr.Internal(err)
 	}
 	list := make([]map[string]any, 0, len(authors))
 	for _, v := range authors {
