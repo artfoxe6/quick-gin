@@ -1,197 +1,119 @@
 package services
 
 import (
-	"errors"
+	"strings"
+	"time"
+
+	"github.com/artfoxe6/quick-gin/internal/app/apperr"
 	"github.com/artfoxe6/quick-gin/internal/app/models"
-	"github.com/artfoxe6/quick-gin/internal/app/repositories"
 	"github.com/artfoxe6/quick-gin/internal/app/repositories/builder"
 	"github.com/artfoxe6/quick-gin/internal/app/request"
 	"gorm.io/gorm"
-	"strings"
-	"time"
 )
 
-type NewsService struct {
-	repository *repositories.NewsRepository
+type NewsRepository interface {
+	FindOne(map[string]any, ...*builder.Builder) *models.News
+	Create(*models.News) error
+	Update(*models.News) error
+	Delete(uint) error
+	Get(uint, ...*builder.Builder) (*models.News, error)
+	List(int, int, ...*builder.Builder) ([]models.News, error)
+	ListIds(int, int, ...*builder.Builder) ([]uint, error)
+	Count(...*builder.Builder) int64
+	Replace(*models.News, map[string]any) error
 }
 
-func NewNewsService() *NewsService {
-	return &NewsService{
-		repository: repositories.NewNewsRepository(),
+type NewsCategoryRepository interface {
+	List(int, int, ...*builder.Builder) ([]models.Category, error)
+}
+
+type NewsTagRepository interface {
+	List(int, int, ...*builder.Builder) ([]models.Tag, error)
+}
+
+type NewsService interface {
+	Create(r *request.NewsUpsert, user *models.User) (uint, error)
+	Update(r *request.NewsUpsert) error
+	Delete(id uint) error
+	Detail(id uint) (any, error)
+	List(r *request.NewsSearch) (any, int64, error)
+}
+
+type newsService struct {
+	newsRepo     NewsRepository
+	categoryRepo NewsCategoryRepository
+	tagRepo      NewsTagRepository
+	now          func() time.Time
+}
+
+func NewNewsService(newsRepo NewsRepository, categoryRepo NewsCategoryRepository, tagRepo NewsTagRepository) NewsService {
+	return &newsService{
+		newsRepo:     newsRepo,
+		categoryRepo: categoryRepo,
+		tagRepo:      tagRepo,
+		now:          time.Now,
 	}
 }
 
-func (s *NewsService) Create(r *request.NewsUpsert, user *models.User) (uint, error) {
-	news := models.News{}
-	if r.Slug != nil && *r.Slug != "" {
-		news.Slug = *r.Slug
-	} else {
-		news.Slug = news.GetSlug()
-	}
-	if r.Title != nil {
-		news.Title = *r.Title
-	}
-	if r.Content != nil {
-		news.Content = *r.Content
-	}
-	if r.AuthorId != nil {
-		news.AuthorId = r.AuthorId
-	}
-	if r.Source != nil {
-		news.Source = *r.Source
-	}
-	if r.Status != nil {
-		if news.Status != models.NEWS_STATUS_PUBLISHED && *r.Status == models.NEWS_STATUS_PUBLISHED {
-			news.PublishTime = time.Now().Unix()
-		}
-		news.Status = *r.Status
-	}
-	if r.IsFeatured != nil {
-		if *r.IsFeatured {
-			news.IsFeatured = time.Now().Unix()
-		} else {
-			news.IsFeatured = 0
-		}
-	}
-	if r.Summary != nil {
-		news.Summary = *r.Summary
-	}
-	if r.ImageUrl != nil {
-		news.ImageUrl = *r.ImageUrl
-	}
-	if r.VideoUrl != nil {
-		news.VideoUrl = *r.VideoUrl
-	}
-	if r.AudioUrl != nil {
-		news.AudioUrl = *r.AudioUrl
-	}
-	if r.TypeId != nil {
-		news.TypeId = *r.TypeId
-	}
-	if r.Slug != nil {
-		news.Slug = *r.Slug
-	}
+func (s *newsService) Create(r *request.NewsUpsert, user *models.User) (uint, error) {
+	assembler := newNewsAssembler(s.now)
+	news := assembler.buildForCreate(r, user)
 
-	if r.CategoryIds != nil {
-		categoryRepository := repositories.NewCategoryRepository()
-		tempNews, err := categoryRepository.List(0, 100, builder.New().In("id", *r.CategoryIds))
-		if err != nil {
-			return 0, err
-		}
-		for _, tempNew := range tempNews {
-			news.Categories = append(news.Categories, &tempNew)
-		}
-	}
-	if r.TagIds != nil {
-		tagRepository := repositories.NewTagRepository()
-		tempTags, err := tagRepository.List(0, 100, builder.New().In("id", *r.TagIds))
-		if err != nil {
-			return 0, err
-		}
-		for _, tempTag := range tempTags {
-			news.Tags = append(news.Tags, &tempTag)
-		}
-	}
-	if one := s.repository.FindOne(map[string]any{"slug": news.Slug}); one.ID != 0 {
-		return 0, errors.New("slug exists")
-	}
-	if err := s.repository.Create(&news); err != nil {
+	if err := s.attachAssociations(&news, r); err != nil {
 		return 0, err
+	}
+	if existing := s.newsRepo.FindOne(map[string]any{"slug": news.Slug}); existing.ID != 0 {
+		return 0, apperr.BadRequest("slug exists")
+	}
+	if err := s.newsRepo.Create(&news); err != nil {
+		return 0, apperr.Internal(err)
 	}
 	return news.ID, nil
 }
 
-func (s *NewsService) Update(r *request.NewsUpsert) error {
-	news, err := s.repository.Get(*r.Id)
+func (s *newsService) Update(r *request.NewsUpsert) error {
+	if r.Id == nil {
+		return apperr.BadRequest("id is required")
+	}
+	news, err := s.newsRepo.Get(*r.Id)
 	if err != nil {
-		return err
-	}
-	if r.Title != nil {
-		news.Title = *r.Title
-	}
-	if r.Content != nil {
-		news.Content = *r.Content
-	}
-	if r.AuthorId != nil {
-		news.AuthorId = r.AuthorId
-	}
-	if r.Source != nil {
-		news.Source = *r.Source
-	}
-	if r.Status != nil {
-		if news.Status != models.NEWS_STATUS_PUBLISHED && *r.Status == models.NEWS_STATUS_PUBLISHED {
-			news.PublishTime = time.Now().Unix()
-		}
-		news.Status = *r.Status
-	}
-	if r.IsFeatured != nil {
-		if *r.IsFeatured {
-			news.IsFeatured = time.Now().Unix()
-		} else {
-			news.IsFeatured = 0
-		}
-	}
-	if r.Summary != nil {
-		news.Summary = *r.Summary
-	}
-	if r.ImageUrl != nil {
-		news.ImageUrl = *r.ImageUrl
-	}
-	if r.VideoUrl != nil {
-		news.VideoUrl = *r.VideoUrl
-	}
-	if r.AudioUrl != nil {
-		news.AudioUrl = *r.AudioUrl
-	}
-	if r.TypeId != nil {
-		news.TypeId = *r.TypeId
-	}
-	if r.Slug != nil {
-		news.Slug = *r.Slug
+		return apperr.Internal(err)
 	}
 
-	if r.CategoryIds != nil {
-		categoryRepository := repositories.NewCategoryRepository()
-		tempNews, err := categoryRepository.List(0, 100, builder.New().In("id", *r.CategoryIds))
-		if err != nil {
-			return err
-		}
-		for _, tempNew := range tempNews {
-			news.Categories = append(news.Categories, &tempNew)
-		}
-	}
-	if r.TagIds != nil {
-		tagRepository := repositories.NewTagRepository()
-		tempTags, err := tagRepository.List(0, 100, builder.New().In("id", *r.TagIds))
-		if err != nil {
-			return err
-		}
-		for _, tempTag := range tempTags {
-			news.Tags = append(news.Tags, &tempTag)
-		}
-	}
-	if one := s.repository.FindOne(map[string]any{"slug": news.Slug}); one.ID != 0 && one.ID != news.ID {
-		return errors.New("slug exists")
-	}
-	if err = s.repository.Update(news); err != nil {
+	assembler := newNewsAssembler(s.now)
+	assembler.apply(r, news)
+
+	if err := s.attachAssociations(news, r); err != nil {
 		return err
+	}
+
+	if one := s.newsRepo.FindOne(map[string]any{"slug": news.Slug}); one.ID != 0 && one.ID != news.ID {
+		return apperr.BadRequest("slug exists")
+	}
+	if err = s.newsRepo.Update(news); err != nil {
+		return apperr.Internal(err)
 	}
 	return nil
 }
 
-func (s *NewsService) Delete(id uint) error {
-	return s.repository.Delete(id)
+func (s *newsService) Delete(id uint) error {
+	if err := s.newsRepo.Delete(id); err != nil {
+		return apperr.Internal(err)
+	}
+	return nil
 }
-func (s *NewsService) Detail(id uint) (any, error) {
+
+func (s *newsService) Detail(id uint) (any, error) {
 	b := builder.New()
 	b.Preload("Categories").Preload("Author").Preload("Tags").Preload("User")
-	news, err := s.repository.Get(id, b)
+	news, err := s.newsRepo.Get(id, b)
 	if err != nil {
-		return nil, err
+		return nil, apperr.Internal(err)
 	}
 	return news.ToMap(), nil
 }
-func (s *NewsService) List(r *request.NewsSearch) (any, int64, error) {
+
+func (s *newsService) List(r *request.NewsSearch) (any, int64, error) {
 	b := builder.New()
 	if r.CategoryIds != nil && *r.CategoryIds != "" {
 		b.Append(func(tx *gorm.DB) {
@@ -212,7 +134,7 @@ func (s *NewsService) List(r *request.NewsSearch) (any, int64, error) {
 	if r.Status != nil {
 		b.Eq("status", *r.Status)
 	}
-	total := s.repository.Count(b)
+	total := s.newsRepo.Count(b)
 	orderSet := map[int]string{
 		0: "id desc",
 		1: "id asc",
@@ -222,23 +144,151 @@ func (s *NewsService) List(r *request.NewsSearch) (any, int64, error) {
 	b.Append(func(tx *gorm.DB) {
 		tx.Select("id").Group("id")
 	})
-	newIds, err := s.repository.ListIds(r.Offset, r.Limit, b)
+	newIds, err := s.newsRepo.ListIds(r.Offset, r.Limit, b)
+	if err != nil {
+		return nil, 0, apperr.Internal(err)
+	}
 	if len(newIds) == 0 {
-		return nil, 0, err
+		return []map[string]any{}, total, nil
 	}
 	b2 := builder.New().In("id", newIds)
 	b2.Preload("Categories").Preload("Author").Preload("Tags")
-	news, err := s.repository.List(0, r.Limit, b2)
+	news, err := s.newsRepo.List(0, r.Limit, b2)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, apperr.Internal(err)
 	}
 	list := make([]map[string]any, 0, len(news))
 	for _, id := range newIds {
-		for _, v := range news {
-			if v.ID == id {
-				list = append(list, v.ToMap())
+		for i := range news {
+			if news[i].ID == id {
+				list = append(list, news[i].ToMap())
+				break
 			}
 		}
 	}
 	return list, total, nil
+}
+
+func (s *newsService) attachAssociations(news *models.News, r *request.NewsUpsert) error {
+	associations := make(map[string]any)
+	if r.CategoryIds != nil {
+		ids := *r.CategoryIds
+		if len(ids) == 0 {
+			associations["Categories"] = []*models.Category{}
+		} else {
+			categories, err := s.categoryRepo.List(0, len(ids), builder.New().In("id", ids))
+			if err != nil {
+				return apperr.Internal(err)
+			}
+			cats := make([]*models.Category, 0, len(categories))
+			for i := range categories {
+				cats = append(cats, &categories[i])
+			}
+			associations["Categories"] = cats
+		}
+	}
+	if r.TagIds != nil {
+		ids := *r.TagIds
+		if len(ids) == 0 {
+			associations["Tags"] = []*models.Tag{}
+		} else {
+			tags, err := s.tagRepo.List(0, len(ids), builder.New().In("id", ids))
+			if err != nil {
+				return apperr.Internal(err)
+			}
+			ts := make([]*models.Tag, 0, len(tags))
+			for i := range tags {
+				ts = append(ts, &tags[i])
+			}
+			associations["Tags"] = ts
+		}
+	}
+	if len(associations) == 0 {
+		return nil
+	}
+	// Replace associations only when updating existing record to avoid gorm creating duplicates during create.
+	if news.ID == 0 {
+		if cats, ok := associations["Categories"].([]*models.Category); ok {
+			news.Categories = cats
+		}
+		if ts, ok := associations["Tags"].([]*models.Tag); ok {
+			news.Tags = ts
+		}
+		return nil
+	}
+	if err := s.newsRepo.Replace(news, associations); err != nil {
+		return apperr.Internal(err)
+	}
+	return nil
+}
+
+// newNewsAssembler constructs a reusable assembler for news entities.
+func newNewsAssembler(now func() time.Time) newsAssembler {
+	if now == nil {
+		now = time.Now
+	}
+	return newsAssembler{now: now}
+}
+
+type newsAssembler struct {
+	now func() time.Time
+}
+
+func (a newsAssembler) buildForCreate(r *request.NewsUpsert, user *models.User) models.News {
+	news := models.News{}
+	a.apply(r, &news)
+	if user != nil {
+		userID := user.ID
+		news.UserId = &userID
+	}
+	if news.Slug == "" {
+		news.Slug = news.GetSlug()
+	}
+	return news
+}
+
+func (a newsAssembler) apply(r *request.NewsUpsert, news *models.News) {
+	if r.Title != nil {
+		news.Title = *r.Title
+	}
+	if r.Content != nil {
+		news.Content = *r.Content
+	}
+	if r.AuthorId != nil {
+		news.AuthorId = r.AuthorId
+	}
+	if r.Source != nil {
+		news.Source = *r.Source
+	}
+	if r.Status != nil {
+		if news.Status != models.NEWS_STATUS_PUBLISHED && *r.Status == models.NEWS_STATUS_PUBLISHED {
+			news.PublishTime = a.now().Unix()
+		}
+		news.Status = *r.Status
+	}
+	if r.IsFeatured != nil {
+		if *r.IsFeatured {
+			news.IsFeatured = a.now().Unix()
+		} else {
+			news.IsFeatured = 0
+		}
+	}
+	if r.Summary != nil {
+		news.Summary = *r.Summary
+	}
+	if r.ImageUrl != nil {
+		news.ImageUrl = *r.ImageUrl
+	}
+	if r.VideoUrl != nil {
+		news.VideoUrl = *r.VideoUrl
+	}
+	if r.AudioUrl != nil {
+		news.AudioUrl = *r.AudioUrl
+	}
+	if r.TypeId != nil {
+		news.TypeId = *r.TypeId
+	}
+	if r.Slug != nil && *r.Slug != "" {
+		news.Slug = *r.Slug
+	}
 }

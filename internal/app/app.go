@@ -1,14 +1,17 @@
 package app
 
 import (
-	"github.com/artfoxe6/quick-gin/internal/app/middleware"
-	"github.com/gin-gonic/gin"
+	"errors"
 	"net/http"
 	"reflect"
+
+	"github.com/artfoxe6/quick-gin/internal/app/apperr"
+	"github.com/gin-gonic/gin"
 )
 
 type Api struct {
-	context *gin.Context
+	context  *gin.Context
+	hasError bool
 }
 
 func New(c *gin.Context, request any) *Api {
@@ -19,32 +22,50 @@ func New(c *gin.Context, request any) *Api {
 	return api
 }
 
-func (a *Api) Bind(r any) {
-	if err := a.context.Bind(r); err != nil {
-		a.Error(err)
+func (a *Api) Bind(r any) bool {
+	if err := a.context.ShouldBind(r); err != nil {
+		a.Error(apperr.BadRequest(err.Error()))
+		return true
 	}
+	return false
 }
 
-func (a *Api) Error(params ...any) {
-	var err = middleware.ApiError{
-		Code: http.StatusBadRequest,
-		Msg:  "",
+func (a *Api) Error(err error) bool {
+	if err == nil {
+		return false
 	}
-	for _, param := range params {
-		t := reflect.TypeOf(param).String()
-		switch t {
-		case "int":
-			err.Code = param.(int)
-		case "string":
-			err.Msg = param.(string)
-		default:
-			if e, ok := param.(error); ok {
-				s := e.Error()
-				err.Msg = s
-			}
+	a.hasError = true
+
+	status := http.StatusBadRequest
+	message := http.StatusText(status)
+
+	var appErr *apperr.Error
+	if errors.As(err, &appErr) {
+		if appErr.Code != 0 {
+			status = appErr.Code
+		}
+		if appErr.Message != "" {
+			message = appErr.Message
+		}
+		if appErr.Err != nil {
+			err = appErr.Err
+		}
+	} else {
+		if err.Error() != "" {
+			message = err.Error()
 		}
 	}
-	panic(err)
+
+	if message == "" {
+		message = http.StatusText(status)
+	}
+
+	a.context.AbortWithStatusJSON(status, gin.H{"err": message})
+	return true
+}
+
+func (a *Api) HasError() bool {
+	return a.hasError
 }
 
 func (a *Api) Json(data ...any) {

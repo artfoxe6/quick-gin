@@ -4,6 +4,8 @@ import (
 	"github.com/artfoxe6/quick-gin/internal/app/config"
 	"github.com/artfoxe6/quick-gin/internal/app/handlers"
 	"github.com/artfoxe6/quick-gin/internal/app/middleware"
+	"github.com/artfoxe6/quick-gin/internal/app/repositories"
+	"github.com/artfoxe6/quick-gin/internal/app/services"
 	"github.com/gin-gonic/gin"
 )
 
@@ -21,9 +23,27 @@ func Handler() *gin.Engine {
 		})
 	})
 
+	userRepo := repositories.NewUserRepository()
+	codeRepo := repositories.NewCodeRepository()
+	categoryRepo := repositories.NewCategoryRepository()
+	tagRepo := repositories.NewTagRepository()
+	authorRepo := repositories.NewAuthorRepository()
+	newsRepo := repositories.NewNewsRepository()
+
+	userService := services.NewUserService(userRepo, codeRepo)
+	categoryService := services.NewCategoryService(categoryRepo)
+	tagService := services.NewTagService(tagRepo)
+	authorService := services.NewAuthorService(authorRepo)
+	newsService := services.NewNewsService(newsRepo, categoryRepo, tagRepo)
+
+	user := handlers.NewUserHandler(userService)
+	category := handlers.NewCategoryHandler(categoryService)
+	tag := handlers.NewTagHandler(tagService)
+	author := handlers.NewAuthorHandler(authorService)
+	news := handlers.NewNewsHandler(newsService)
+
 	api := r.Group("/api", middleware.Sign(config.App.SignKey))
-	admin := r.Group("/admin", middleware.Auth("admin"))
-	user := handlers.NewUserHandler()
+	admin := r.Group("/admin", middleware.Auth(userService, "admin"))
 	api.POST("/user/login", user.Login)
 	api.POST("/user/fresh-token", user.FreshToken)
 	api.POST("/user/register", user.Register)
@@ -31,11 +51,9 @@ func Handler() *gin.Engine {
 	api.POST("/code", user.Code)
 	api.POST("/upload", user.Upload)
 
-	news := handlers.NewNewsHandler()
 	api.GET("/news/detail", news.Detail)
 	api.GET("/news/list", news.List)
 
-	category := handlers.NewCategoryHandler()
 	api.GET("/news/category/list", category.List)
 
 	admin.POST("/news/create", news.Create)
@@ -50,14 +68,12 @@ func Handler() *gin.Engine {
 	admin.GET("/news/category/detail", category.Detail)
 	admin.GET("/news/category/list", category.List)
 
-	tag := handlers.NewTagHandler()
 	admin.POST("/news/tag/create", tag.Create)
 	admin.POST("/news/tag/update", tag.Update)
 	admin.POST("/news/tag/delete", tag.Delete)
 	admin.GET("/news/tag/detail", tag.Detail)
 	admin.GET("/news/tag/list", tag.List)
 
-	author := handlers.NewAuthorHandler()
 	admin.POST("/news/author/create", author.Create)
 	admin.POST("/news/author/update", author.Update)
 	admin.POST("/news/author/delete", author.Delete)

@@ -281,77 +281,91 @@ func (s *{{.Name}}Service) List(r *request.NormalSearch) (any, int64, error) {
 var handlerTpl = `package handlers
 
 import (
-	"{{.Package}}/internal/app"
-	"{{.Package}}/internal/app/request"
-	"{{.Package}}/internal/app/services"
-	"github.com/gin-gonic/gin"
-	"strconv"
+"strconv"
+
+"{{.Package}}/internal/app"
+"{{.Package}}/internal/app/apperr"
+"{{.Package}}/internal/app/request"
+"{{.Package}}/internal/app/services"
+"github.com/gin-gonic/gin"
 )
 
 type {{.Name}}Handler struct {
-	service *services.{{.Name}}Service
+service services.{{.Name}}Service
 }
 
-func New{{.Name}}Handler() *{{.Name}}Handler {
-	return &{{.Name}}Handler{
-		service: services.New{{.Name}}Service(),
-	}
+func New{{.Name}}Handler(service services.{{.Name}}Service) *{{.Name}}Handler {
+return &{{.Name}}Handler{service: service}
 }
 func (h *{{.Name}}Handler) Create(c *gin.Context) {
-	r := new(request.BaseUpsert)
-	api := app.New(c, r)
-	err := h.service.Create(r)
-	if err != nil {
-		api.Error(err)
-	}
-	api.Json()
+r := new(request.BaseUpsert)
+api := app.New(c, r)
+if api.HasError() {
+return
+}
+if api.Error(h.service.Create(r)) {
+return
+}
+api.Json()
 }
 func (h *{{.Name}}Handler) Update(c *gin.Context) {
-	r := new(request.BaseUpsert)
-	api := app.New(c, r)
-	err := h.service.Update(r)
-	if err != nil {
-		api.Error(err)
-	}
-	api.Json()
+r := new(request.BaseUpsert)
+api := app.New(c, r)
+if api.HasError() {
+return
+}
+if api.Error(h.service.Update(r)) {
+return
+}
+api.Json()
 }
 
 func (h *{{.Name}}Handler) Delete(c *gin.Context) {
-	r := new(request.DeleteId)
-	api := app.New(c, r)
-	err := h.service.Delete(r.Id)
-	if err != nil {
-		api.Error(err)
-	}
-	api.Json()
+r := new(request.DeleteId)
+api := app.New(c, r)
+if api.HasError() {
+return
+}
+if api.Error(h.service.Delete(r.Id)) {
+return
+}
+api.Json()
 }
 func (h *{{.Name}}Handler) Detail(c *gin.Context) {
-	api := app.New(c, nil)
-	idStr := c.Query("id")
-	if idStr == "" {
-		api.Error("id is required")
-	}
-	id, err := strconv.Atoi(idStr)
-	if err != nil {
-		api.Error("id is required")
-	}
-	list, err := h.service.Detail(uint(id))
-	if err != nil {
-		api.Error(err)
-	}
-	api.Json(list)
+api := app.New(c, nil)
+if api.HasError() {
+return
+}
+idStr := c.Query("id")
+if idStr == "" {
+api.Error(apperr.BadRequest("id is required"))
+return
+}
+id, err := strconv.Atoi(idStr)
+if err != nil {
+api.Error(apperr.BadRequest("id is required"))
+return
+}
+list, err := h.service.Detail(uint(id))
+if api.Error(err) {
+return
+}
+api.Json(list)
 }
 func (h *{{.Name}}Handler) List(c *gin.Context) {
-	r := new(request.NormalSearch)
-	api := app.New(c, r)
-	data, total, err := h.service.List(r)
-	if err != nil {
-		api.Error(err)
-	}
-	api.Json(map[string]any{
-		"total": total,
-		"data":  data,
-	})
+r := new(request.NormalSearch)
+api := app.New(c, r)
+if api.HasError() {
+return
+}
+data, total, err := h.service.List(r)
+if api.Error(err) {
+return
+}
+api.Json(map[string]any{
+"total": total,
+"data":  data,
+})
 }`
 
 var routeTpl = `

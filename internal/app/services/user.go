@@ -1,9 +1,8 @@
 package services
 
 import (
-	"errors"
+	"github.com/artfoxe6/quick-gin/internal/app/apperr"
 	"github.com/artfoxe6/quick-gin/internal/app/models"
-	"github.com/artfoxe6/quick-gin/internal/app/repositories"
 	"github.com/artfoxe6/quick-gin/internal/app/repositories/builder"
 	"github.com/artfoxe6/quick-gin/internal/app/request"
 	"github.com/artfoxe6/quick-gin/internal/pkg/kit"
@@ -13,17 +12,46 @@ import (
 	"time"
 )
 
-type UserService struct {
-	repository *repositories.UserRepository
+type UserRepository interface {
+	FindOne(map[string]any, ...*builder.Builder) *models.User
+	Create(*models.User) error
+	Update(*models.User) error
+	Delete(uint) error
+	Get(uint, ...*builder.Builder) (*models.User, error)
+	ListWithCount(int, int, ...*builder.Builder) ([]models.User, int64, error)
+	GetByEmail(string) *models.User
+	Count(...*builder.Builder) int64
 }
 
-func NewUserService() *UserService {
-	return &UserService{
-		repository: repositories.NewUserRepository(),
-	}
+type CodeRepository interface {
+	FindOne(map[string]any, ...*builder.Builder) *models.Code
+	Create(*models.Code) error
 }
 
-func (s *UserService) Create(r *request.UserUpsert) error {
+type UserService interface {
+	Create(r *request.UserUpsert) error
+	Update(r *request.UserUpsert) error
+	Delete(id uint) error
+	Detail(id uint) (any, error)
+	List(r *request.NormalSearch) (any, int64, error)
+	Login(data *request.UserLogin) (string, error)
+	SuperUserToken(email, password string) (string, error)
+	Register(data *request.UserCreate) (string, error)
+	SendCode(data *request.Code) error
+	UpdatePassword(data *request.UpdatePassword) error
+	GetByID(id uint) (*models.User, error)
+}
+
+type userService struct {
+	userRepo UserRepository
+	codeRepo CodeRepository
+}
+
+func NewUserService(userRepo UserRepository, codeRepo CodeRepository) UserService {
+	return &userService{userRepo: userRepo, codeRepo: codeRepo}
+}
+
+func (s *userService) Create(r *request.UserUpsert) error {
 	user := models.User{
 		Avatar:   *r.Avatar,
 		Email:    *r.Email,
@@ -31,19 +59,19 @@ func (s *UserService) Create(r *request.UserUpsert) error {
 		Password: *r.Password,
 		Role:     *r.Role,
 	}
-	if one := s.repository.FindOne(map[string]any{"email": user.Email}); one.ID != 0 {
-		return errors.New("email exists")
+	if one := s.userRepo.FindOne(map[string]any{"email": user.Email}); one.ID != 0 {
+		return apperr.BadRequest("email exists")
 	}
-	if err := s.repository.Create(&user); err != nil {
-		return err
+	if err := s.userRepo.Create(&user); err != nil {
+		return apperr.Internal(err)
 	}
 	return nil
 }
 
-func (s *UserService) Update(r *request.UserUpsert) error {
-	user, err := s.repository.Get(*r.Id)
+func (s *userService) Update(r *request.UserUpsert) error {
+	user, err := s.userRepo.Get(*r.Id)
 	if err != nil {
-		return err
+		return apperr.Internal(err)
 	}
 	if r.Name != nil {
 		user.Name = *r.Name
@@ -58,42 +86,49 @@ func (s *UserService) Update(r *request.UserUpsert) error {
 		user.Avatar = *r.Avatar
 	}
 	if r.Password != nil {
-		hashPassword, _ := bcrypt.GenerateFromPassword([]byte(*r.Password), bcrypt.DefaultCost)
+		hashPassword, hashErr := bcrypt.GenerateFromPassword([]byte(*r.Password), bcrypt.DefaultCost)
+		if hashErr != nil {
+			return apperr.Internal(hashErr)
+		}
 		user.Password = string(hashPassword)
 	}
-	if one := s.repository.FindOne(map[string]any{"email": user.Email}); one.ID != 0 && one.ID != user.ID {
-		return errors.New("email exists")
+	if one := s.userRepo.FindOne(map[string]any{"email": user.Email}); one.ID != 0 && one.ID != user.ID {
+		return apperr.BadRequest("email exists")
 	}
-	if err = s.repository.Update(user); err != nil {
-		return err
+	if err = s.userRepo.Update(user); err != nil {
+		return apperr.Internal(err)
 	}
 	return nil
 }
 
-func (s *UserService) Delete(id uint) error {
-	return s.repository.Delete(id)
+func (s *userService) Delete(id uint) error {
+	if err := s.userRepo.Delete(id); err != nil {
+		return apperr.Internal(err)
+	}
+	return nil
 }
-func (s *UserService) Detail(id uint) (any, error) {
-	user, err := s.repository.Get(id)
+
+func (s *userService) Detail(id uint) (any, error) {
+	user, err := s.userRepo.Get(id)
 	if err != nil {
-		return nil, err
+		return nil, apperr.Internal(err)
 	}
 	return user.ToMap(), nil
 }
-func (s *UserService) List(r *request.NormalSearch) (any, int64, error) {
+
+func (s *userService) List(r *request.NormalSearch) (any, int64, error) {
 	b := builder.New()
 	if r.Keyword != nil {
-		b.Where("name like ? or email like ?",
-			"%"+*r.Keyword+"%", "%"+*r.Keyword+"%")
+		b.Where("name like ? or email like ?", "%"+*r.Keyword+"%", "%"+*r.Keyword+"%")
 	}
 	orderSet := map[int]string{
 		0: "id desc",
 		1: "id asc",
 	}
 	b.Order(orderSet[r.Sort])
-	users, total, err := s.repository.ListWithCount(r.Offset, r.Limit, b)
+	users, total, err := s.userRepo.ListWithCount(r.Offset, r.Limit, b)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, apperr.Internal(err)
 	}
 	list := make([]map[string]any, 0, len(users))
 	for _, v := range users {
@@ -102,126 +137,155 @@ func (s *UserService) List(r *request.NormalSearch) (any, int64, error) {
 	return list, total, nil
 }
 
-func (s *UserService) Login(data *request.UserLogin) (string, error) {
-
-	user := s.repository.GetByEmail(data.Email)
+func (s *userService) Login(data *request.UserLogin) (string, error) {
+	user := s.userRepo.GetByEmail(data.Email)
 	if user == nil {
-		return "", errors.New("email not exists")
+		return "", apperr.BadRequest("email not exists")
 	}
-
-	err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(data.Password))
-	if err != nil {
-		return "", errors.New("password is wrong")
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(data.Password)); err != nil {
+		return "", apperr.BadRequest("password is wrong")
 	}
 	if data.Role != "" && user.Role != data.Role {
 		user.Role = data.Role
 	}
-	return token.Generate(user.TokenData())
+	tokenStr, err := token.Generate(user.TokenData())
+	if err != nil {
+		return "", apperr.Internal(err)
+	}
+	return tokenStr, nil
 }
 
-func (s *UserService) SuperUserToken(email, password string) (string, error) {
-	user := s.repository.GetByEmail(email)
-	hashPassword, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+func (s *userService) SuperUserToken(email, password string) (string, error) {
+	user := s.userRepo.GetByEmail(email)
+	hashPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", apperr.Internal(err)
+	}
 	if user == nil {
 		user = &models.User{
 			Name:     "Admin",
 			Password: string(hashPassword),
 			Email:    email,
 		}
-		err := s.repository.Create(user)
-		if err != nil {
-			return "", err
+		if err := s.userRepo.Create(user); err != nil {
+			return "", apperr.Internal(err)
 		}
 	}
 
-	if err := bcrypt.CompareHashAndPassword(hashPassword, []byte(password)); err != nil {
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
 		user.Password = string(hashPassword)
-		_ = s.repository.Update(user)
+		if updateErr := s.userRepo.Update(user); updateErr != nil {
+			return "", apperr.Internal(updateErr)
+		}
 	}
-	return token.Generate(map[string]any{
+	tokenStr, err := token.Generate(map[string]any{
 		"id":    user.ID,
 		"name":  user.Name,
 		"email": user.Email,
 		"role":  "admin",
 	})
+	if err != nil {
+		return "", apperr.Internal(err)
+	}
+	return tokenStr, nil
 }
 
-func (s *UserService) Register(data *request.UserCreate) (string, error) {
-
-	if data.Code != "" {
-		codeRepository := repositories.NewCodeRepository()
-		code := codeRepository.FindOne(map[string]any{"email": data.Email})
+func (s *userService) Register(data *request.UserCreate) (string, error) {
+	if data.Code != "" && s.codeRepo != nil {
+		code := s.codeRepo.FindOne(map[string]any{"email": data.Email})
 		if code.Code != data.Code {
-			return "", errors.New("code is wrong")
+			return "", apperr.BadRequest("code is wrong")
 		}
 	}
-	user := s.repository.GetByEmail(data.Email)
+	user := s.userRepo.GetByEmail(data.Email)
 	if user != nil {
-		return "", errors.New("email exists")
+		return "", apperr.BadRequest("email exists")
 	}
 
-	hashPassword, _ := bcrypt.GenerateFromPassword([]byte(data.Password), bcrypt.DefaultCost)
+	hashPassword, err := bcrypt.GenerateFromPassword([]byte(data.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", apperr.Internal(err)
+	}
 	user = &models.User{
 		Name:     data.Name,
 		Password: string(hashPassword),
 		Email:    data.Email,
 		Avatar:   data.Avatar,
 	}
-	err := s.repository.Create(user)
-	if err != nil {
-		return "", err
+	if err := s.userRepo.Create(user); err != nil {
+		return "", apperr.Internal(err)
 	}
 
-	return token.Generate(user.TokenData())
+	tokenStr, err := token.Generate(user.TokenData())
+	if err != nil {
+		return "", apperr.Internal(err)
+	}
+	return tokenStr, nil
 }
 
-func (s *UserService) SendCode(data *request.Code) error {
+func (s *userService) SendCode(data *request.Code) error {
 	if data.Type == 1 {
-		user := s.repository.FindOne(map[string]any{"email": data.Email})
+		user := s.userRepo.FindOne(map[string]any{"email": data.Email})
 		if user != nil {
-			return errors.New("user not found")
+			return apperr.BadRequest("user not found")
 		}
 	}
-	if data.Email != "" {
-		b := builder.New()
-		b.Eq("email", data.Email).Gt("created_at", time.Now().Format("20060102"))
-		if todayCount := s.repository.Count(b); todayCount > 20 {
-			return errors.New("The number of sending times for the day has reached the limit")
-		}
-		code := kit.GenCode(6)
-		resp, err := mailer.New(mailer.Template["code"], map[string]any{"code": code}).SendTo("", data.Email)
-		if err != nil {
-			return err
-		}
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			return errors.New(resp.Body)
-		}
-		codeRepository := repositories.NewCodeRepository()
-		return codeRepository.Create(&models.Code{
-			Email: data.Email,
-			Type:  data.Type,
-			Code:  code,
-		})
+	if data.Email == "" {
+		return nil
+	}
+	b := builder.New()
+	b.Eq("email", data.Email).Gt("created_at", time.Now().Format("20060102"))
+	if todayCount := s.userRepo.Count(b); todayCount > 20 {
+		return apperr.BadRequest("The number of sending times for the day has reached the limit")
+	}
+	code := kit.GenCode(6)
+	resp, err := mailer.New(mailer.Template["code"], map[string]any{"code": code}).SendTo("", data.Email)
+	if err != nil {
+		return apperr.Internal(err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return apperr.BadRequest(resp.Body)
+	}
+	if s.codeRepo == nil {
+		return apperr.Internal(nil)
+	}
+	if err := s.codeRepo.Create(&models.Code{
+		Email: data.Email,
+		Type:  data.Type,
+		Code:  code,
+	}); err != nil {
+		return apperr.Internal(err)
 	}
 	return nil
 }
 
-func (s *UserService) UpdatePassword(data *request.UpdatePassword) error {
-
-	if data.Code != "" {
-		codeRepository := repositories.NewCodeRepository()
-		code := codeRepository.FindOne(map[string]any{"email": data.Email})
+func (s *userService) UpdatePassword(data *request.UpdatePassword) error {
+	if data.Code != "" && s.codeRepo != nil {
+		code := s.codeRepo.FindOne(map[string]any{"email": data.Email})
 		if code.Code != data.Code {
-			return errors.New("code is wrong")
+			return apperr.BadRequest("code is wrong")
 		}
 	}
-	user := s.repository.FindOne(map[string]any{"email": data.Email})
+	user := s.userRepo.FindOne(map[string]any{"email": data.Email})
 	if user == nil {
-		return errors.New("user not found")
+		return apperr.BadRequest("user not found")
 	}
 
-	hashPassword, _ := bcrypt.GenerateFromPassword([]byte(data.Password), bcrypt.DefaultCost)
+	hashPassword, err := bcrypt.GenerateFromPassword([]byte(data.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return apperr.Internal(err)
+	}
 	user.Password = string(hashPassword)
-	return s.repository.Update(user)
+	if err := s.userRepo.Update(user); err != nil {
+		return apperr.Internal(err)
+	}
+	return nil
+}
 
+func (s *userService) GetByID(id uint) (*models.User, error) {
+	user, err := s.userRepo.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	return user, nil
 }
