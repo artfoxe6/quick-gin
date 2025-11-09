@@ -1,6 +1,6 @@
 package request
 
-// BaseUpsert is a lightweight DTO used by the code generator for simple CRUD modules.
+// BaseUpsert is a lightweight DTO used for simple CRUD modules.
 type BaseUpsert struct {
 	Id   *uint   `json:"id"`
 	Name *string `json:"name" binding:"required"`

@@ -1,9 +1,11 @@
 package model
 
-import "gorm.io/gorm"
+import (
+	"github.com/artfoxe6/quick-gin/internal/app/core/model"
+)
 
 type User struct {
-	gorm.Model
+	model.Base
 	Name     string `gorm:"size:255;index:idx_name"`
 	Password string `gorm:"size:255"`
 	Email    string `gorm:"size:255"`

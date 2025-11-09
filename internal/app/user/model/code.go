@@ -1,9 +1,11 @@
 package model
 
-import "gorm.io/gorm"
+import (
+	"github.com/artfoxe6/quick-gin/internal/app/core/model"
+)
 
 type Code struct {
-	gorm.Model
+	model.Base
 	Email string `gorm:"size:255"`
 	Code  string `gorm:"size:255"`
 	Type  int

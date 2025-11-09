@@ -5,7 +5,6 @@ Quick-Gin is a Gin-based Go scaffold that helps you bootstrap production-ready R
 ## Highlights
 - Layered architecture (Model → Repository → Service → Handler) with dependency injection
 - JWT authentication, Redis/memory caching, and ready-to-use middleware (CORS, logging, recovery, signature)
-- CRUD generator that creates model, repository, service, handler, and route boilerplate
 - Optional integrations for Aliyun OSS, SendGrid mailer, and cron jobs
 - Works with MySQL or SQLite out of the box
 
@@ -30,21 +29,45 @@ cd myapp
    ```
 3. The API listens on `http://localhost:8080` by default.
 
-## CRUD generator
-```bash
-go run cmd/gen/gen.go --module Product
-```
-This produces matching files under `internal/app/{models,repositories,services,handlers}` and injects the routes automatically.
-
 ## Project layout
 ```
 quick-gin/
-├── cmd/            # Entry points (app, code generator, project cloner)
-├── internal/app/   # Config, handlers, middleware, models, repositories, services
-├── internal/pkg/   # Shared components (cache, db, mailer, oss, token, etc.)
-├── config.ini      # Configuration template
-├── Makefile        # Helper commands
-└── README.md
+├── cmd/                    # Application entry points
+│   └── app/               # Main application
+│       └── main.go
+├── internal/              # Private application code
+│   ├── app/              # Application layer
+│   │   ├── core/         # Core components (config, middleware, models, etc.)
+│   │   │   ├── apperr/   # Error handling
+│   │   │   ├── config/   # Configuration management
+│   │   │   ├── middleware/ # HTTP middleware (auth, cors, recovery, etc.)
+│   │   │   ├── model/    # Base models
+│   │   │   ├── repository/ # Base repository with query builder
+│   │   │   ├── request/  # Request DTOs
+│   │   │   └── router/   # Route configuration
+│   │   └── user/         # User module example
+│   │       ├── dto/      # Data transfer objects
+│   │       ├── handler/  # HTTP handlers
+│   │       ├── model/    # Data models
+│   │       ├── repo/     # Repository layer
+│   │       └── service/  # Business logic layer
+│   ├── pkg/              # Shared packages
+│   │   ├── cache/        # Cache abstraction (memory/redis)
+│   │   ├── cronjob/      # Scheduled task management
+│   │   ├── db/           # Database connection
+│   │   ├── kit/          # Utility functions
+│   │   ├── mailer/       # Email service
+│   │   ├── oss/          # Object storage service
+│   │   └── token/        # JWT token handling
+│   └── scaffold/         # Code generation utilities
+├── data/                 # Data files
+│   └── app.db           # SQLite database
+├── config.ini            # Configuration file
+├── main.go              # Alternative application entry
+├── Makefile             # Build commands
+├── go.mod               # Go module definition
+├── go.sum               # Go module checksums
+└── README.md            # Project documentation
 ```
 
 ## Tooling
