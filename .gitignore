@@ -1,6 +1,5 @@
 .idea
 build
-config.ini
 log
 CLAUDE.md
 AGENTS.md

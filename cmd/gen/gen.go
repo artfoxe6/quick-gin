@@ -51,22 +51,21 @@ func main() {
 	}
 
 	files := []struct {
-		dir string
-		tpl string
+		path string
+		tpl  string
 	}{
-		{dir: "repositories", tpl: repositoryTpl},
-		{dir: "models", tpl: modelTpl},
-		{dir: "services", tpl: serviceTpl},
-		{dir: "handlers", tpl: handlerTpl},
+		{path: filepath.Join("internal", "app", info.LowerName, "repo", "repo.go"), tpl: repositoryTpl},
+		{path: filepath.Join("internal", "app", info.LowerName, "model", "model.go"), tpl: modelTpl},
+		{path: filepath.Join("internal", "app", info.LowerName, "service", "service.go"), tpl: serviceTpl},
+		{path: filepath.Join("internal", "app", info.LowerName, "handler", "handler.go"), tpl: handlerTpl},
 	}
 	for _, file := range files {
-		path := filepath.Join("internal", "app", file.dir, fmt.Sprintf("%s.go", info.LowerName))
-		if err := genCode(file.tpl, path, info); err != nil {
-			fmt.Printf("error generating %s: %v\n", path, err)
+		if err := genCode(file.tpl, file.path, info); err != nil {
+			fmt.Printf("error generating %s: %v\n", file.path, err)
 		}
 	}
 
-	if err := genRoute(routeTpl, filepath.Join("internal", "app", "router", "route.go"), info); err != nil {
+	if err := genRoute(routeTpl, filepath.Join("internal", "app", "core", "router", "route.go"), info); err != nil {
 		fmt.Printf("error updating router: %v\n", err)
 	}
 }
@@ -90,13 +89,34 @@ func genRoute(tpl, path string, info GenInfo) error {
 	if err != nil {
 		return fmt.Errorf("read file: %w", err)
 	}
-	routeInit := fmt.Sprintf("%s := handlers.New%sHandler()", info.LowerName, info.Name)
+	routeInit := fmt.Sprintf("%sHandler := %sHandler.New%sHandler", info.LowerName, info.LowerName, info.Name)
 	if strings.Contains(string(oldContent), routeInit) {
 		fmt.Printf("router already contains handlers for %s, skipping route update\n", info.LowerName)
 		return nil
 	}
+	newContent := string(oldContent)
+
+	imports := []string{
+		fmt.Sprintf("%sHandler \"%s/internal/app/%s/handler\"", info.LowerName, info.Package, info.LowerName),
+		fmt.Sprintf("%sRepo \"%s/internal/app/%s/repo\"", info.LowerName, info.Package, info.LowerName),
+		fmt.Sprintf("%sService \"%s/internal/app/%s/service\"", info.LowerName, info.Package, info.LowerName),
+	}
+
+	for _, imp := range imports {
+		if strings.Contains(newContent, imp) {
+			continue
+		}
+		const importMarker = "import ("
+		idx := strings.Index(newContent, importMarker)
+		if idx == -1 {
+			return fmt.Errorf("route file missing import block")
+		}
+		idx += len(importMarker)
+		newContent = newContent[:idx] + "\n\t" + imp + newContent[idx:]
+	}
+
 	const returnMarker = "return r"
-	newContent := strings.Replace(string(oldContent), returnMarker, buffer.String(), 1)
+	newContent = strings.Replace(newContent, returnMarker, buffer.String(), 1)
 	if newContent == string(oldContent) {
 		return fmt.Errorf("route file missing marker %q", returnMarker)
 	}
@@ -165,27 +185,28 @@ func getPackage() string {
 }
 
 var repositoryTpl = `
-package repositories
+package repo
 
 import (
-	"{{.Package}}/internal/app/models"
+	"{{.Package}}/internal/app/core/repository"
+	"{{.Package}}/internal/app/{{.LowerName}}/model"
 	"{{.Package}}/internal/pkg/db"
 )
 
 type {{.Name}}Repository struct {
-	Repository[models.{{.Name}}]
+	repository.Repository[model.{{.Name}}]
 }
 
 func New{{.Name}}Repository() *{{.Name}}Repository {
 	return &{{.Name}}Repository{
-		Repository[models.{{.Name}}]{
+		repository.Repository[model.{{.Name}}]{
 			db: db.Db(),
 		},
 	}
 }
 `
 var modelTpl = `
-package models
+package model
 
 import "gorm.io/gorm"
 
@@ -204,27 +225,27 @@ func (m *{{.Name}}) ToMap() map[string]any {
 }`
 
 var serviceTpl = `
-package services
+package service
 
 import (
-	"{{.Package}}/internal/app/models"
-	"{{.Package}}/internal/app/repositories"
-	"{{.Package}}/internal/app/repositories/builder"
-	"{{.Package}}/internal/app/request"
+	"{{.Package}}/internal/app/core/repository/builder"
+	"{{.Package}}/internal/app/core/request"
+	"{{.Package}}/internal/app/{{.LowerName}}/model"
+	"{{.Package}}/internal/app/{{.LowerName}}/repo"
 )
 
 type {{.Name}}Service struct {
-	repository *repositories.{{.Name}}Repository
+	repository *repo.{{.Name}}Repository
 }
 
-func New{{.Name}}Service() *{{.Name}}Service {
+func New{{.Name}}Service(repository *repo.{{.Name}}Repository) *{{.Name}}Service {
 	return &{{.Name}}Service{
-		repository: repositories.New{{.Name}}Repository(),
+		repository: repository,
 	}
 }
 
 func (s *{{.Name}}Service) Create(r *request.BaseUpsert) error {
-	m := models.{{.Name}}{
+	m := model.{{.Name}}{
 		Name: *r.Name,
 	}
 	if err := s.repository.Create(&m); err != nil {
@@ -267,7 +288,7 @@ func (s *{{.Name}}Service) List(r *request.NormalSearch) (any, int64, error) {
 		1: "id asc",
 	}
 	b.Order(orderSet[r.Sort])
-	data, total, err := s.repository.ListWithCount(r.Offset, r.Limit, b)
+	data, total, err := s.repository.ListWithCount(r.Offset(), r.Limit, b)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -278,106 +299,108 @@ func (s *{{.Name}}Service) List(r *request.NormalSearch) (any, int64, error) {
 	return list, total, nil
 }`
 
-var handlerTpl = `package handlers
+var handlerTpl = `package handler
 
 import (
-"strconv"
+	"strconv"
 
-"{{.Package}}/internal/app"
-"{{.Package}}/internal/app/apperr"
-"{{.Package}}/internal/app/request"
-"{{.Package}}/internal/app/services"
-"github.com/gin-gonic/gin"
+	app "{{.Package}}/internal/app/core"
+	"{{.Package}}/internal/app/core/apperr"
+	"{{.Package}}/internal/app/core/request"
+	"{{.Package}}/internal/app/{{.LowerName}}/service"
+	"github.com/gin-gonic/gin"
 )
 
 type {{.Name}}Handler struct {
-service services.{{.Name}}Service
+	service *service.{{.Name}}Service
 }
 
-func New{{.Name}}Handler(service services.{{.Name}}Service) *{{.Name}}Handler {
-return &{{.Name}}Handler{service: service}
+func New{{.Name}}Handler(service *service.{{.Name}}Service) *{{.Name}}Handler {
+	return &{{.Name}}Handler{service: service}
 }
 func (h *{{.Name}}Handler) Create(c *gin.Context) {
-r := new(request.BaseUpsert)
-api := app.New(c, r)
-if api.HasError() {
-return
-}
-if api.Error(h.service.Create(r)) {
-return
-}
-api.Json()
+	r := new(request.BaseUpsert)
+	api := app.New(c, r)
+	if api.HasError() {
+		return
+	}
+	if api.Error(h.service.Create(r)) {
+		return
+	}
+	api.Json()
 }
 func (h *{{.Name}}Handler) Update(c *gin.Context) {
-r := new(request.BaseUpsert)
-api := app.New(c, r)
-if api.HasError() {
-return
-}
-if api.Error(h.service.Update(r)) {
-return
-}
-api.Json()
+	r := new(request.BaseUpsert)
+	api := app.New(c, r)
+	if api.HasError() {
+		return
+	}
+	if api.Error(h.service.Update(r)) {
+		return
+	}
+	api.Json()
 }
 
 func (h *{{.Name}}Handler) Delete(c *gin.Context) {
-r := new(request.DeleteId)
-api := app.New(c, r)
-if api.HasError() {
-return
-}
-if api.Error(h.service.Delete(r.Id)) {
-return
-}
-api.Json()
+	r := new(request.DeleteId)
+	api := app.New(c, r)
+	if api.HasError() {
+		return
+	}
+	if api.Error(h.service.Delete(r.Id)) {
+		return
+	}
+	api.Json()
 }
 func (h *{{.Name}}Handler) Detail(c *gin.Context) {
-api := app.New(c, nil)
-if api.HasError() {
-return
-}
-idStr := c.Query("id")
-if idStr == "" {
-api.Error(apperr.BadRequest("id is required"))
-return
-}
-id, err := strconv.Atoi(idStr)
-if err != nil {
-api.Error(apperr.BadRequest("id is required"))
-return
-}
-list, err := h.service.Detail(uint(id))
-if api.Error(err) {
-return
-}
-api.Json(list)
+	api := app.New(c, nil)
+	if api.HasError() {
+		return
+	}
+	idStr := c.Query("id")
+	if idStr == "" {
+		api.Error(apperr.BadRequest("id is required"))
+		return
+	}
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		api.Error(apperr.BadRequest("id is required"))
+		return
+	}
+	list, err := h.service.Detail(uint(id))
+	if api.Error(err) {
+		return
+	}
+	api.Json(list)
 }
 func (h *{{.Name}}Handler) List(c *gin.Context) {
-r := new(request.NormalSearch)
-api := app.New(c, r)
-if api.HasError() {
-return
-}
-data, total, err := h.service.List(r)
-if api.Error(err) {
-return
-}
-api.Json(map[string]any{
-"total": total,
-"data":  data,
-})
+	r := new(request.NormalSearch)
+	api := app.New(c, r)
+	if api.HasError() {
+		return
+	}
+	data, total, err := h.service.List(r)
+	if api.Error(err) {
+		return
+	}
+	api.Json(map[string]any{
+		"total": total,
+		"data":  data,
+	})
 }`
 
 var routeTpl = `
 
-{{.LowerName}} := handlers.New{{.Name}}Handler()
-admin.POST("/{{.LowerName}}/create", {{.LowerName}}.Create)
-admin.POST("/{{.LowerName}}/update", {{.LowerName}}.Update)
-admin.POST("/{{.LowerName}}/delete", {{.LowerName}}.Delete)
-admin.GET("/{{.LowerName}}/detail", {{.LowerName}}.Detail)
-admin.GET("/{{.LowerName}}/list", {{.LowerName}}.List)
-api.GET("/{{.LowerName}}/detail", {{.LowerName}}.Detail)
-api.GET("/{{.LowerName}}/list", {{.LowerName}}.List)
+	{{.LowerName}}Repository := {{.LowerName}}Repo.New{{.Name}}Repository()
+	{{.LowerName}}Service := {{.LowerName}}Service.New{{.Name}}Service({{.LowerName}}Repository)
+	{{.LowerName}}Handler := {{.LowerName}}Handler.New{{.Name}}Handler({{.LowerName}}Service)
+	admin.POST("/{{.LowerName}}/create", {{.LowerName}}Handler.Create)
+	admin.POST("/{{.LowerName}}/update", {{.LowerName}}Handler.Update)
+	admin.POST("/{{.LowerName}}/delete", {{.LowerName}}Handler.Delete)
+	admin.GET("/{{.LowerName}}/detail", {{.LowerName}}Handler.Detail)
+	admin.GET("/{{.LowerName}}/list", {{.LowerName}}Handler.List)
+	api.GET("/{{.LowerName}}/detail", {{.LowerName}}Handler.Detail)
+	api.GET("/{{.LowerName}}/list", {{.LowerName}}Handler.List)
 
 return r`
 

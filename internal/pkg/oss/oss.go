@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
-	"github.com/artfoxe6/quick-gin/internal/app/config"
+	"github.com/artfoxe6/quick-gin/internal/app/core/config"
 	"io"
 	"log"
 	"net/http"

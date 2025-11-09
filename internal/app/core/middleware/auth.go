@@ -4,7 +4,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/artfoxe6/quick-gin/internal/app/models"
+	"github.com/artfoxe6/quick-gin/internal/app/user/model"
 	"github.com/artfoxe6/quick-gin/internal/pkg/token"
 	"github.com/gin-gonic/gin"
 )
@@ -12,7 +12,7 @@ import (
 const ContextUserKey = "current_user"
 
 type UserProvider interface {
-	GetByID(id uint) (*models.User, error)
+	GetByID(id uint) (*model.User, error)
 }
 
 func Auth(userProvider UserProvider, roles ...string) gin.HandlerFunc {
@@ -60,11 +60,11 @@ func Auth(userProvider UserProvider, roles ...string) gin.HandlerFunc {
 	}
 }
 
-func UserFromContext(c *gin.Context) (*models.User, bool) {
+func UserFromContext(c *gin.Context) (*model.User, bool) {
 	value, exists := c.Get(ContextUserKey)
 	if !exists {
 		return nil, false
 	}
-	user, ok := value.(*models.User)
+	user, ok := value.(*model.User)
 	return user, ok && user != nil
 }

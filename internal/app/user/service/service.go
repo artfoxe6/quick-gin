@@ -1,10 +1,11 @@
-package services
+package service
 
 import (
-	"github.com/artfoxe6/quick-gin/internal/app/apperr"
-	"github.com/artfoxe6/quick-gin/internal/app/models"
-	"github.com/artfoxe6/quick-gin/internal/app/repositories/builder"
-	"github.com/artfoxe6/quick-gin/internal/app/request"
+	"github.com/artfoxe6/quick-gin/internal/app/core/apperr"
+	"github.com/artfoxe6/quick-gin/internal/app/core/repository/builder"
+	"github.com/artfoxe6/quick-gin/internal/app/core/request"
+	"github.com/artfoxe6/quick-gin/internal/app/user/dto"
+	"github.com/artfoxe6/quick-gin/internal/app/user/model"
 	"github.com/artfoxe6/quick-gin/internal/pkg/kit"
 	"github.com/artfoxe6/quick-gin/internal/pkg/mailer"
 	"github.com/artfoxe6/quick-gin/internal/pkg/token"
@@ -13,33 +14,33 @@ import (
 )
 
 type UserRepository interface {
-	FindOne(map[string]any, ...*builder.Builder) *models.User
-	Create(*models.User) error
-	Update(*models.User) error
+	FindOne(map[string]any, ...*builder.Builder) *model.User
+	Create(*model.User) error
+	Update(*model.User) error
 	Delete(uint) error
-	Get(uint, ...*builder.Builder) (*models.User, error)
-	ListWithCount(int, int, ...*builder.Builder) ([]models.User, int64, error)
-	GetByEmail(string) *models.User
+	Get(uint, ...*builder.Builder) (*model.User, error)
+	ListWithCount(int, int, ...*builder.Builder) ([]model.User, int64, error)
+	GetByEmail(string) *model.User
 	Count(...*builder.Builder) int64
 }
 
 type CodeRepository interface {
-	FindOne(map[string]any, ...*builder.Builder) *models.Code
-	Create(*models.Code) error
+	FindOne(map[string]any, ...*builder.Builder) *model.Code
+	Create(*model.Code) error
 }
 
 type UserService interface {
-	Create(r *request.UserUpsert) error
-	Update(r *request.UserUpsert) error
+	Create(r *dto.UserUpsert) error
+	Update(r *dto.UserUpsert) error
 	Delete(id uint) error
 	Detail(id uint) (any, error)
 	List(r *request.NormalSearch) (any, int64, error)
-	Login(data *request.UserLogin) (string, error)
+	Login(data *dto.UserLogin) (string, error)
 	SuperUserToken(email, password string) (string, error)
-	Register(data *request.UserCreate) (string, error)
-	SendCode(data *request.Code) error
-	UpdatePassword(data *request.UpdatePassword) error
-	GetByID(id uint) (*models.User, error)
+	Register(data *dto.UserCreate) (string, error)
+	SendCode(data *dto.Code) error
+	UpdatePassword(data *dto.UpdatePassword) error
+	GetByID(id uint) (*model.User, error)
 }
 
 type userService struct {
@@ -51,8 +52,8 @@ func NewUserService(userRepo UserRepository, codeRepo CodeRepository) UserServic
 	return &userService{userRepo: userRepo, codeRepo: codeRepo}
 }
 
-func (s *userService) Create(r *request.UserUpsert) error {
-	user := models.User{
+func (s *userService) Create(r *dto.UserUpsert) error {
+	user := model.User{
 		Avatar:   *r.Avatar,
 		Email:    *r.Email,
 		Name:     *r.Name,
@@ -68,7 +69,7 @@ func (s *userService) Create(r *request.UserUpsert) error {
 	return nil
 }
 
-func (s *userService) Update(r *request.UserUpsert) error {
+func (s *userService) Update(r *dto.UserUpsert) error {
 	user, err := s.userRepo.Get(*r.Id)
 	if err != nil {
 		return apperr.Internal(err)
@@ -137,7 +138,7 @@ func (s *userService) List(r *request.NormalSearch) (any, int64, error) {
 	return list, total, nil
 }
 
-func (s *userService) Login(data *request.UserLogin) (string, error) {
+func (s *userService) Login(data *dto.UserLogin) (string, error) {
 	user := s.userRepo.GetByEmail(data.Email)
 	if user == nil {
 		return "", apperr.BadRequest("email not exists")
@@ -162,7 +163,7 @@ func (s *userService) SuperUserToken(email, password string) (string, error) {
 		return "", apperr.Internal(err)
 	}
 	if user == nil {
-		user = &models.User{
+		user = &model.User{
 			Name:     "Admin",
 			Password: string(hashPassword),
 			Email:    email,
@@ -190,7 +191,7 @@ func (s *userService) SuperUserToken(email, password string) (string, error) {
 	return tokenStr, nil
 }
 
-func (s *userService) Register(data *request.UserCreate) (string, error) {
+func (s *userService) Register(data *dto.UserCreate) (string, error) {
 	if data.Code != "" && s.codeRepo != nil {
 		code := s.codeRepo.FindOne(map[string]any{"email": data.Email})
 		if code.Code != data.Code {
@@ -206,7 +207,7 @@ func (s *userService) Register(data *request.UserCreate) (string, error) {
 	if err != nil {
 		return "", apperr.Internal(err)
 	}
-	user = &models.User{
+	user = &model.User{
 		Name:     data.Name,
 		Password: string(hashPassword),
 		Email:    data.Email,
@@ -223,7 +224,7 @@ func (s *userService) Register(data *request.UserCreate) (string, error) {
 	return tokenStr, nil
 }
 
-func (s *userService) SendCode(data *request.Code) error {
+func (s *userService) SendCode(data *dto.Code) error {
 	if data.Type == 1 {
 		user := s.userRepo.FindOne(map[string]any{"email": data.Email})
 		if user != nil {
@@ -249,7 +250,7 @@ func (s *userService) SendCode(data *request.Code) error {
 	if s.codeRepo == nil {
 		return apperr.Internal(nil)
 	}
-	if err := s.codeRepo.Create(&models.Code{
+	if err := s.codeRepo.Create(&model.Code{
 		Email: data.Email,
 		Type:  data.Type,
 		Code:  code,
@@ -259,7 +260,7 @@ func (s *userService) SendCode(data *request.Code) error {
 	return nil
 }
 
-func (s *userService) UpdatePassword(data *request.UpdatePassword) error {
+func (s *userService) UpdatePassword(data *dto.UpdatePassword) error {
 	if data.Code != "" && s.codeRepo != nil {
 		code := s.codeRepo.FindOne(map[string]any{"email": data.Email})
 		if code.Code != data.Code {
@@ -282,7 +283,7 @@ func (s *userService) UpdatePassword(data *request.UpdatePassword) error {
 	return nil
 }
 
-func (s *userService) GetByID(id uint) (*models.User, error) {
+func (s *userService) GetByID(id uint) (*model.User, error) {
 	user, err := s.userRepo.Get(id)
 	if err != nil {
 		return nil, err

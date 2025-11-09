@@ -1,4 +1,4 @@
-package handlers
+package handler
 
 import (
 	"bytes"
@@ -10,11 +10,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/artfoxe6/quick-gin/internal/app"
-	"github.com/artfoxe6/quick-gin/internal/app/apperr"
-	"github.com/artfoxe6/quick-gin/internal/app/config"
-	"github.com/artfoxe6/quick-gin/internal/app/request"
-	"github.com/artfoxe6/quick-gin/internal/app/services"
+	app "github.com/artfoxe6/quick-gin/internal/app/core"
+	"github.com/artfoxe6/quick-gin/internal/app/core/apperr"
+	"github.com/artfoxe6/quick-gin/internal/app/core/config"
+	"github.com/artfoxe6/quick-gin/internal/app/core/request"
+	"github.com/artfoxe6/quick-gin/internal/app/user/dto"
+	"github.com/artfoxe6/quick-gin/internal/app/user/service"
 	"github.com/artfoxe6/quick-gin/internal/pkg/kit"
 	"github.com/artfoxe6/quick-gin/internal/pkg/oss"
 	"github.com/artfoxe6/quick-gin/internal/pkg/token"
@@ -22,15 +23,15 @@ import (
 )
 
 type UserHandler struct {
-	service services.UserService
+	service service.UserService
 }
 
-func NewUserHandler(service services.UserService) *UserHandler {
+func NewUserHandler(service service.UserService) *UserHandler {
 	return &UserHandler{service: service}
 }
 
 func (h *UserHandler) Create(c *gin.Context) {
-	r := new(request.UserUpsert)
+	r := new(dto.UserUpsert)
 	api := app.New(c, r)
 	if api.HasError() {
 		return
@@ -42,7 +43,7 @@ func (h *UserHandler) Create(c *gin.Context) {
 }
 
 func (h *UserHandler) Update(c *gin.Context) {
-	r := new(request.UserUpsert)
+	r := new(dto.UserUpsert)
 	api := app.New(c, r)
 	if api.HasError() {
 		return
@@ -104,7 +105,7 @@ func (h *UserHandler) List(c *gin.Context) {
 }
 
 func (h *UserHandler) Login(c *gin.Context) {
-	r := new(request.UserLogin)
+	r := new(dto.UserLogin)
 	api := app.New(c, r)
 	if api.HasError() {
 		return
@@ -123,7 +124,7 @@ func (h *UserHandler) Login(c *gin.Context) {
 }
 
 func (h *UserHandler) Register(c *gin.Context) {
-	r := new(request.UserCreate)
+	r := new(dto.UserCreate)
 	api := app.New(c, r)
 	if api.HasError() {
 		return
@@ -136,7 +137,7 @@ func (h *UserHandler) Register(c *gin.Context) {
 }
 
 func (h *UserHandler) UpdatePassword(c *gin.Context) {
-	r := new(request.UpdatePassword)
+	r := new(dto.UpdatePassword)
 	api := app.New(c, r)
 	if api.HasError() {
 		return
@@ -148,7 +149,7 @@ func (h *UserHandler) UpdatePassword(c *gin.Context) {
 }
 
 func (h *UserHandler) Code(c *gin.Context) {
-	r := new(request.Code)
+	r := new(dto.Code)
 	api := app.New(c, r)
 	if api.HasError() {
 		return
@@ -173,7 +174,7 @@ func (h *UserHandler) FreshToken(c *gin.Context) {
 }
 
 func (h *UserHandler) Upload(c *gin.Context) {
-	r := new(request.Upload)
+	r := new(dto.Upload)
 	api := app.New(c, r)
 	if api.HasError() {
 		return

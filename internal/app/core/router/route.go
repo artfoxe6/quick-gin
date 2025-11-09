@@ -1,11 +1,11 @@
 package router
 
 import (
-	"github.com/artfoxe6/quick-gin/internal/app/config"
-	"github.com/artfoxe6/quick-gin/internal/app/handlers"
-	"github.com/artfoxe6/quick-gin/internal/app/middleware"
-	"github.com/artfoxe6/quick-gin/internal/app/repositories"
-	"github.com/artfoxe6/quick-gin/internal/app/services"
+	"github.com/artfoxe6/quick-gin/internal/app/core/config"
+	"github.com/artfoxe6/quick-gin/internal/app/core/middleware"
+	userHandler "github.com/artfoxe6/quick-gin/internal/app/user/handler"
+	userRepo "github.com/artfoxe6/quick-gin/internal/app/user/repo"
+	userService "github.com/artfoxe6/quick-gin/internal/app/user/service"
 	"github.com/gin-gonic/gin"
 )
 
@@ -23,15 +23,15 @@ func Handler() *gin.Engine {
 		})
 	})
 
-	userRepo := repositories.NewUserRepository()
-	codeRepo := repositories.NewCodeRepository()
+	userRepository := userRepo.NewUserRepository()
+	codeRepository := userRepo.NewCodeRepository()
 
-	userService := services.NewUserService(userRepo, codeRepo)
+	userSvc := userService.NewUserService(userRepository, codeRepository)
 
-	user := handlers.NewUserHandler(userService)
+	user := userHandler.NewUserHandler(userSvc)
 
 	api := r.Group("/api", middleware.Sign(config.App.SignKey))
-	admin := r.Group("/admin", middleware.Auth(userService, "admin"))
+	admin := r.Group("/admin", middleware.Auth(userSvc, "admin"))
 	api.POST("/user/login", user.Login)
 	api.POST("/user/fresh-token", user.FreshToken)
 	api.POST("/user/register", user.Register)

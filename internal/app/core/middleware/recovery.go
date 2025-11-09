@@ -4,7 +4,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/artfoxe6/quick-gin/internal/app/apperr"
+	"github.com/artfoxe6/quick-gin/internal/app/core/apperr"
 	"github.com/gin-gonic/gin"
 )
 

@@ -24,16 +24,16 @@ var (
 		RefreshExp int
 	})
 	Database = new(struct {
-		Type            string  // mysql, sqlite
+		Type            string // mysql, sqlite
 		Host            string
 		Port            int
 		User            string
 		Password        string
 		Db              string
 		DbFile          string // SQLite database file path
-		ConnMaxLifeTime int     // 连接最大生命周期（分钟）
-		MaxPoolSize     int     // 最大连接池大小
-		MaxIdle         int     // 最大空闲连接数
+		ConnMaxLifeTime int    // 连接最大生命周期（分钟）
+		MaxPoolSize     int    // 最大连接池大小
+		MaxIdle         int    // 最大空闲连接数
 	})
 	Redis = new(struct {
 		Host      string
@@ -60,13 +60,13 @@ var (
 		CdnUrl          string
 	})
 	Cache = new(struct {
-		Type    string  // memory, redis
-		Host    string  // Redis host
-		Port    int     // Redis port
-		Password string // Redis password
-		Db      int     // Redis db
-		MaxIdle int     // Redis max idle
-		MaxActive int   // Redis max active
+		Type      string // memory, redis
+		Host      string // Redis host
+		Port      int    // Redis port
+		Password  string // Redis password
+		Db        int    // Redis db
+		MaxIdle   int    // Redis max idle
+		MaxActive int    // Redis max active
 	})
 )
 

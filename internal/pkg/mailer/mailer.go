@@ -1,7 +1,7 @@
 package mailer
 
 import (
-	"github.com/artfoxe6/quick-gin/internal/app/config"
+	"github.com/artfoxe6/quick-gin/internal/app/core/config"
 	"github.com/sendgrid/rest"
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"

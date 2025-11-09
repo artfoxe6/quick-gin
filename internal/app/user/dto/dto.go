@@ -1,4 +1,4 @@
-package request
+package dto
 
 import "mime/multipart"
 
@@ -42,22 +42,4 @@ type Upload struct {
 	Type string                `form:"type" binding:"required"`
 	File *multipart.FileHeader `form:"file" binding:"required_without=Raw"`
 	Raw  string                `form:"raw"`
-}
-
-type DeleteId struct {
-	Id uint `json:"id" binding:"required"`
-}
-
-type NormalSearch struct {
-	Page    int     `form:"page"`
-	Limit   int     `form:"limit"`
-	Keyword *string `form:"keyword"`
-	Sort    int     `form:"sort"`
-}
-
-func (r *NormalSearch) Offset() int {
-	if r.Page <= 1 {
-		return 0
-	}
-	return (r.Page - 1) * r.Limit
 }

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/artfoxe6/quick-gin/internal/app/config"
+	"github.com/artfoxe6/quick-gin/internal/app/core/config"
 	"github.com/gomodule/redigo/redis"
 )
 

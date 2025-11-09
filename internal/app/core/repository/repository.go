@@ -1,13 +1,21 @@
-package repositories
+package repository
 
 import (
-	"github.com/artfoxe6/quick-gin/internal/app/repositories/builder"
+	"github.com/artfoxe6/quick-gin/internal/app/core/repository/builder"
 	"gorm.io/gorm"
 )
 
 type Repository[T any] struct {
 	db      *gorm.DB
 	builder *builder.Builder
+}
+
+func New[T any](db *gorm.DB) *Repository[T] {
+	return &Repository[T]{db: db}
+}
+
+func (r *Repository[T]) DB() *gorm.DB {
+	return r.db
 }
 
 func (r *Repository[T]) Create(m *T) error {

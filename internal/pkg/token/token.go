@@ -2,9 +2,9 @@ package token
 
 import (
 	"errors"
-	"github.com/artfoxe6/quick-gin/internal/app/config"
-	"github.com/artfoxe6/quick-gin/internal/app/models"
-	"github.com/artfoxe6/quick-gin/internal/app/repositories"
+	"github.com/artfoxe6/quick-gin/internal/app/core/config"
+	"github.com/artfoxe6/quick-gin/internal/app/user/model"
+	"github.com/artfoxe6/quick-gin/internal/app/user/repo"
 	"github.com/golang-jwt/jwt/v5"
 	"time"
 )
@@ -51,12 +51,12 @@ func Refresh(token string) (string, error) {
 	return newT.SignedString([]byte(config.Jwt.Secret))
 }
 
-func GetUserByToken(token string) (*models.User, error) {
+func GetUserByToken(token string) (*model.User, error) {
 	data, err := Parse(token)
 	if err != nil {
 		return nil, err
 	}
 	userId := uint(data["id"].(float64))
-	userRepository := repositories.NewUserRepository()
+	userRepository := repo.NewUserRepository()
 	return userRepository.Get(userId)
 }

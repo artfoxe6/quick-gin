@@ -2,8 +2,8 @@ package db
 
 import (
 	"fmt"
-	"github.com/artfoxe6/quick-gin/internal/app/config"
-	"github.com/artfoxe6/quick-gin/internal/app/models"
+	"github.com/artfoxe6/quick-gin/internal/app/core/config"
+	"github.com/artfoxe6/quick-gin/internal/app/user/model"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -104,7 +104,8 @@ func setup() {
 
 	// 自动迁移数据库表
 	tables := []any{
-		&models.User{},
+		&model.User{},
+		&model.Code{},
 	}
 
 	fmt.Println("Running database migrations...")
