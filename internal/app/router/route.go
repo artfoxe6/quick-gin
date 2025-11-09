@@ -25,22 +25,10 @@ func Handler() *gin.Engine {
 
 	userRepo := repositories.NewUserRepository()
 	codeRepo := repositories.NewCodeRepository()
-	categoryRepo := repositories.NewCategoryRepository()
-	tagRepo := repositories.NewTagRepository()
-	authorRepo := repositories.NewAuthorRepository()
-	newsRepo := repositories.NewNewsRepository()
 
 	userService := services.NewUserService(userRepo, codeRepo)
-	categoryService := services.NewCategoryService(categoryRepo)
-	tagService := services.NewTagService(tagRepo)
-	authorService := services.NewAuthorService(authorRepo)
-	newsService := services.NewNewsService(newsRepo, categoryRepo, tagRepo)
 
 	user := handlers.NewUserHandler(userService)
-	category := handlers.NewCategoryHandler(categoryService)
-	tag := handlers.NewTagHandler(tagService)
-	author := handlers.NewAuthorHandler(authorService)
-	news := handlers.NewNewsHandler(newsService)
 
 	api := r.Group("/api", middleware.Sign(config.App.SignKey))
 	admin := r.Group("/admin", middleware.Auth(userService, "admin"))
@@ -50,35 +38,6 @@ func Handler() *gin.Engine {
 	api.POST("/user/password/update", user.UpdatePassword)
 	api.POST("/code", user.Code)
 	api.POST("/upload", user.Upload)
-
-	api.GET("/news/detail", news.Detail)
-	api.GET("/news/list", news.List)
-
-	api.GET("/news/category/list", category.List)
-
-	admin.POST("/news/create", news.Create)
-	admin.POST("/news/update", news.Update)
-	admin.POST("/news/delete", news.Delete)
-	admin.GET("/news/detail", news.Detail)
-	admin.GET("/news/list", news.List)
-
-	admin.POST("/news/category/create", category.Create)
-	admin.POST("/news/category/update", category.Update)
-	admin.POST("/news/category/delete", category.Delete)
-	admin.GET("/news/category/detail", category.Detail)
-	admin.GET("/news/category/list", category.List)
-
-	admin.POST("/news/tag/create", tag.Create)
-	admin.POST("/news/tag/update", tag.Update)
-	admin.POST("/news/tag/delete", tag.Delete)
-	admin.GET("/news/tag/detail", tag.Detail)
-	admin.GET("/news/tag/list", tag.List)
-
-	admin.POST("/news/author/create", author.Create)
-	admin.POST("/news/author/update", author.Update)
-	admin.POST("/news/author/delete", author.Delete)
-	admin.GET("/news/author/detail", author.Detail)
-	admin.GET("/news/author/list", author.List)
 
 	admin.POST("/user/create", user.Create)
 	admin.POST("/user/update", user.Update)

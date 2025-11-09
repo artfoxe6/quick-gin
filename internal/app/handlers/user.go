@@ -80,11 +80,11 @@ func (h *UserHandler) Detail(c *gin.Context) {
 		api.Error(apperr.BadRequest("id is required"))
 		return
 	}
-	news, err := h.service.Detail(uint(id))
+	user, err := h.service.Detail(uint(id))
 	if api.Error(err) {
 		return
 	}
-	api.Json(news)
+	api.Json(user)
 }
 
 func (h *UserHandler) List(c *gin.Context) {

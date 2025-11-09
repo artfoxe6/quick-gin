@@ -104,10 +104,6 @@ func setup() {
 
 	// 自动迁移数据库表
 	tables := []any{
-		&models.Author{},
-		&models.Category{},
-		&models.News{},
-		&models.Tag{},
 		&models.User{},
 	}
 

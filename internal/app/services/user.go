@@ -126,7 +126,7 @@ func (s *userService) List(r *request.NormalSearch) (any, int64, error) {
 		1: "id asc",
 	}
 	b.Order(orderSet[r.Sort])
-	users, total, err := s.userRepo.ListWithCount(r.Offset, r.Limit, b)
+	users, total, err := s.userRepo.ListWithCount(r.Offset(), r.Limit, b)
 	if err != nil {
 		return nil, 0, apperr.Internal(err)
 	}
