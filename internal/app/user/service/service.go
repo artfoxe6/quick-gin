@@ -1,6 +1,9 @@
 package service
 
 import (
+	"context"
+	"time"
+
 	"github.com/artfoxe6/quick-gin/internal/app/core/apperr"
 	"github.com/artfoxe6/quick-gin/internal/app/core/repository/builder"
 	"github.com/artfoxe6/quick-gin/internal/app/core/request"
@@ -10,7 +13,6 @@ import (
 	"github.com/artfoxe6/quick-gin/internal/pkg/mailer"
 	"github.com/artfoxe6/quick-gin/internal/pkg/token"
 	"golang.org/x/crypto/bcrypt"
-	"time"
 )
 
 type UserRepository interface {
@@ -240,12 +242,8 @@ func (s *userService) SendCode(data *dto.Code) error {
 		return apperr.BadRequest("The number of sending times for the day has reached the limit")
 	}
 	code := kit.GenCode(6)
-	resp, err := mailer.New(mailer.Template["code"], map[string]any{"code": code}).SendTo("", data.Email)
-	if err != nil {
+	if err := mailer.New(mailer.Template["code"], map[string]any{"code": code}).SendTo(context.Background(), "", data.Email); err != nil {
 		return apperr.Internal(err)
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return apperr.BadRequest(resp.Body)
 	}
 	if s.codeRepo == nil {
 		return apperr.Internal(nil)

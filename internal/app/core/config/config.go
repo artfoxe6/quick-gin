@@ -47,8 +47,21 @@ var (
 		Email    string
 		Password string
 	})
-	Sendgrid = new(struct {
+	Mail = new(struct {
+		Provider    string
+		FromName    string
+		FromAddress string
+	})
+	MailSendgrid = new(struct {
 		Key string
+	})
+	MailSMTP = new(struct {
+		Host          string
+		Port          int
+		Username      string
+		Password      string
+		Secure        bool
+		SkipTLSVerify bool
 	})
 	Oss = new(struct {
 		Endpoint        string
@@ -76,14 +89,16 @@ func Setup(cfgPath string) {
 		log.Fatalf("%v", err)
 	}
 	iniMap := map[string]interface{}{
-		"app":      App,
-		"jwt":      Jwt,
-		"database": Database,
-		"redis":    Redis,
-		"cache":    Cache,
-		"super":    Super,
-		"sendgrid": Sendgrid,
-		"oss":      Oss,
+		"app":         App,
+		"jwt":         Jwt,
+		"database":    Database,
+		"redis":       Redis,
+		"cache":       Cache,
+		"super":       Super,
+		"mail":        Mail,
+		"mail_sendgrid": MailSendgrid,
+		"mail_smtp":   MailSMTP,
+		"oss":         Oss,
 	}
 	for k, v := range iniMap {
 		if err = h.Section(k).MapTo(v); err != nil {
